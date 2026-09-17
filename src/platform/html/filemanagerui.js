@@ -19,6 +19,13 @@ const tryMakeDirectory = (path) => {
 }
 
 
+/** Join a directory and a name with exactly one separator, whichever way the
+ *  directory was spelled ("/data" or "/data/"). */
+function joinPath(dir, name) {
+    if (dir.endsWith("/")) return dir + name;
+    return dir + "/" + name;
+}
+
 class FileManagerUI {
     /**
      * @param {number} mode - dialog mode FileManagerUI_[ OPEN, SAVE, BROWSE ]
@@ -278,10 +285,10 @@ class FileManagerUI {
         const nodes = FS.readdir(basePath);
         /** @type {string[]} */
         const files = nodes.filter((nodename) => {
-            return FS.isFile(FS.lstat(basePath + nodename).mode);
+            return FS.isFile(FS.lstat(joinPath(basePath, nodename)).mode);
         });
         /*.map((filename) => {
-            return basePath + filename;
+            return joinPath(basePath, filename);
         });*/
         console.log(`__getFileEntries():`, files);
         return files;
@@ -384,7 +391,7 @@ class FileManagerUI {
                 
             } else {
                 // Just add to Filesystem
-                const path = `${this.__basePathInFilesystem}${file.name}`;
+                const path = joinPath(this.__basePathInFilesystem, file.name);
                 const blobArrayBuffer = await this.__getFileAsArrayBuffer(file);
                 const u8array = new Uint8Array(blobArrayBuffer);
                 const fs = FS.open(path, "w");

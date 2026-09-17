@@ -361,27 +361,25 @@ if(ENABLE_GUI)
             LINK_FLAGS "@${resp_file_path}"
             LINK_DEPENDS "${SHELL};${resp_file_path};${resource_list}")
 
-        add_custom_command(
-            TARGET solvespace POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${CMAKE_CURRENT_SOURCE_DIR}/platform/html/solvespaceui.css
-                    ${EXECUTABLE_OUTPUT_PATH}/solvespaceui.css
-            COMMENT "Copying UI stylesheet"
-            VERBATIM)
-        add_custom_command(
-            TARGET solvespace POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${CMAKE_CURRENT_SOURCE_DIR}/platform/html/solvespaceui.js
-                    ${EXECUTABLE_OUTPUT_PATH}/solvespaceui.js
-            COMMENT "Copying UI script solvespaceui.js"
-            VERBATIM)
-        add_custom_command(
-            TARGET solvespace POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${CMAKE_CURRENT_SOURCE_DIR}/platform/html/filemanagerui.js
-                    ${EXECUTABLE_OUTPUT_PATH}/filemanagerui.js
-            COMMENT "Copying UI script filemanagerui.sj"
-            VERBATIM)
+        # Copy the front-end files next to the built page. These are real build
+        # outputs with real dependencies: editing only the CSS or JS used to leave
+        # a stale copy in bin/, because a POST_BUILD command on an up-to-date
+        # target never runs.
+        set(WEB_UI_FILES solvespaceui.css solvespaceui.js filemanagerui.js)
+        set(WEB_UI_OUTPUTS)
+        foreach(ui_file ${WEB_UI_FILES})
+            add_custom_command(
+                OUTPUT ${EXECUTABLE_OUTPUT_PATH}/${ui_file}
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        ${CMAKE_CURRENT_SOURCE_DIR}/platform/html/${ui_file}
+                        ${EXECUTABLE_OUTPUT_PATH}/${ui_file}
+                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/platform/html/${ui_file}
+                COMMENT "Copying web UI file ${ui_file}"
+                VERBATIM)
+            list(APPEND WEB_UI_OUTPUTS ${EXECUTABLE_OUTPUT_PATH}/${ui_file})
+        endforeach()
+        add_custom_target(solvespace-web-ui ALL DEPENDS ${WEB_UI_OUTPUTS})
+        add_dependencies(solvespace solvespace-web-ui)
     elseif(USE_QT_GUI)
         set_target_properties(solvespace PROPERTIES
             OUTPUT_NAME solvespace-qt)
