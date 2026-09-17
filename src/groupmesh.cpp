@@ -400,6 +400,17 @@ void Group::GenerateShellAndMesh() {
     // we're done.
 
     Group *prevg = srcg->RunningMeshGroup();
+    if(prevg == NULL) {
+        // No group to combine against. This can only happen when the group chain is
+        // broken, i.e. when a damaged or hand-edited file survived loading; keep the
+        // geometry we generated for this group and stop rather than dereferencing null.
+        runningShell.Clear();
+        runningMesh.Clear();
+        runningShell.MakeFromCopyOf(&thisShell);
+        runningMesh.MakeFromCopyOf(&thisMesh);
+        displayDirty = true;
+        return;
+    }
 
     if(!IsForcedToMesh()) {
         SShell *prevs = &(prevg->runningShell);

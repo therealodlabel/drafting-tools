@@ -899,9 +899,30 @@ public:
         EmscriptenWebGLContextAttributes emAttribs = {};
         emscripten_webgl_init_context_attributes(&emAttribs);
         emAttribs.alpha = false;
+        // Prefer a hardware-accelerated context...
         emAttribs.failIfMajorPerformanceCaveat = true;
+        emContext = emscripten_webgl_create_context(emCanvasSel.c_str(), &emAttribs);
 
-        sscheck(emContext = emscripten_webgl_create_context(emCanvasSel.c_str(), &emAttribs));
+        if(emContext <= 0) {
+            // ...but run on a software implementation rather than not at all. Remote
+            // desktops, virtual machines and blocklisted drivers all end up here, and
+            // refusing the context used to leave the user with a silently black canvas.
+            emAttribs.failIfMajorPerformanceCaveat = false;
+            emContext = emscripten_webgl_create_context(emCanvasSel.c_str(), &emAttribs);
+            if(emContext > 0) {
+                dbp("Canvas %s: no accelerated WebGL, using a software context",
+                    emCanvasSel.c_str());
+            }
+        }
+
+        if(emContext <= 0) {
+            dbp("Canvas %s: no WebGL context available at all", emCanvasSel.c_str());
+            val window = val::global("window");
+            if(!window["solvespaceReportNoWebGL"].isUndefined()) {
+                window.call<void>("solvespaceReportNoWebGL");
+            }
+            return;
+        }
         dbp("Canvas %s: got context %d", emCanvasSel.c_str(), emContext);
     }
 
@@ -998,7 +1019,12 @@ public:
     }
 
     void SetTitle(const std::string &title) override {
-        // FIXME(emscripten): implement
+        // Only the graphics window names the document; the property browser lives in
+        // the same page and would otherwise overwrite the tab title.
+        if(emCanvasSel != "#canvas0") return;
+        std::string pageTitle = title.empty() ? std::string("drafting.tools")
+                                              : title + " — drafting.tools";
+        val::global("document").set("title", val(pageTitle));
     }
 
     void SetMenuBar(MenuBarRef menuBar) override {
@@ -1263,7 +1289,7 @@ MessageDialogRef CreateMessageDialog(WindowRef parentWindow) {
 //-----------------------------------------------------------------------------
 
 // In emscripten pseudo filesystem, all userdata will be stored in this directory.
-static std::string basePathInFilesystem = "/data/";
+static std::string basePathInFilesystem = "/data";
 
 
 /* FileDialog that can open, save and browse. Also refer `src/platform/html/filemanagerui.js`.
@@ -1338,7 +1364,20 @@ public:
     
     void SuggestFilename(Platform::Path path) override {
         dbp("FileDialogImplHtml::SuggestFilename(): path=\"%s\"", path.raw.c_str());
-        SetFilename(Platform::Path::From(path.FileStem()));
+        // Keep the extension: the export format is chosen from it, and this dialog
+        // has no format picker to fall back on.
+        std::string name = path.FileName();
+        if(name.empty()) name = path.FileStem();
+        SetFilename(Platform::Path::From(name));
+    }
+
+    // The first extension of the first filter, e.g. "slvs" or "stl".
+    std::string DefaultExtension() const {
+        std::string ext = filters;
+        size_t comma = ext.find(',');
+        if(comma != std::string::npos) ext = ext.substr(0, comma);
+        if(!ext.empty() && ext.front() == '.') ext = ext.substr(1);
+        return ext;
     }
 
     void AddFilter(std::string name, std::vector<std::string> extensions) override {
@@ -1380,6 +1419,18 @@ public:
         dbp("FileSaveDialogImplHtml::RunModal() : dialog closed.");
 
         std::string selectedFilename = this->jsFileManagerUI.call<std::string>("getSelectedFilename");
+        if (selectedFilename.length() > 0 && mode != Modes::OPEN) {
+            // A name typed without an extension used to be saved verbatim, which then
+            // failed to identify a format on export and produced an empty file.
+            if(Path::From(selectedFilename).Extension().empty()) {
+                std::string ext = DefaultExtension();
+                if(!ext.empty()) {
+                    selectedFilename += "." + ext;
+                    dbp("FileDialogImplHtml::RunModal(): added default extension -> %s",
+                        selectedFilename.c_str());
+                }
+            }
+        }
         if (selectedFilename.length() > 0) {
             // Dummy call to set parent directory
             this->SetFilename(Path::From(basePathInFilesystem + "/dummy"));

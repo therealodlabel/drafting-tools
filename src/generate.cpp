@@ -27,7 +27,10 @@ void SolveSpaceUI::MarkGroupDirty(hGroup hg, bool onlyThis) {
             if(onlyThis) break;
         }
     }
-    unsaved = true;
+    if(!unsaved) {
+        unsaved = true;
+        UpdateWindowTitles();
+    }
     ScheduleGenerateAll();
 }
 
@@ -155,6 +158,22 @@ bool SolveSpaceUI::PruneRequestsAndConstraints(hGroup hg) {
 
 void SolveSpaceUI::GenerateAll(Generate type, bool andFindFree, bool genForBBox) {
     int first = 0, last = 0, i;
+
+    // Guard against runaway recursion. GenerateAll() recurses legitimately (once for
+    // the bounding-box pass, and once per pruning round), but a damaged file can send
+    // it around that loop forever; on the desktop that is a stack overflow, and in the
+    // browser it destroys the whole session. Bail out with an error instead.
+    if(generateDepth >= MAX_GENERATE_DEPTH) {
+        Error(_("This file could not be regenerated; it may be damaged.\n\n"
+                "Some elements may be missing or wrong. Save it under a new name if "
+                "you want to keep what did load."));
+        return;
+    }
+    struct DepthGuard {
+        int *depth;
+        explicit DepthGuard(int *d) : depth(d) { (*depth)++; }
+        ~DepthGuard() { (*depth)--; }
+    } depthGuard(&generateDepth);
 
     uint64_t startMillis = GetMilliseconds(),
              endMillis;

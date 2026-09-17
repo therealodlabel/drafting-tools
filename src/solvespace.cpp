@@ -604,6 +604,7 @@ bool SolveSpaceUI::GetFilenameAndSave(bool saveAs) {
         RemoveAutosave();
         saveFile = newSaveFile;
         unsaved = false;
+        UpdateWindowTitles();
         if (this->OnSaveFinished) {
             this->OnSaveFinished(newSaveFile, saveAs, false);
         }
@@ -670,14 +671,19 @@ bool SolveSpaceUI::OkayToStartNewFile() {
 void SolveSpaceUI::UpdateWindowTitles() {
     if(!GW.window || !TW.window) return;
 
+    // Marks a sketch with unsaved changes, so the title is a reliable indicator of
+    // whether closing the window or tab would lose work.
+    const std::string dirty = unsaved ? "\xe2\x80\xa2 " : "";
+
     if(saveFile.IsEmpty()) {
-        GW.window->SetTitle(C_("title", "(new sketch)"));
+        GW.window->SetTitle(dirty + C_("title", "(new sketch)"));
     } else {
         if(!GW.window->SetTitleForFilename(saveFile)) {
             if(SS.showFullFilePath) {
-                GW.window->SetTitle(saveFile.raw);
+                GW.window->SetTitle(dirty + saveFile.raw);
             } else {
-                GW.window->SetTitle(saveFile.raw.substr(saveFile.raw.find_last_of("/\\") + 1));
+                GW.window->SetTitle(
+                    dirty + saveFile.raw.substr(saveFile.raw.find_last_of("/\\") + 1));
             }
         }
     }
@@ -1105,13 +1111,19 @@ void SolveSpaceUI::MenuHelp(Command id) {
 
         case Command::ABOUT:
             Message(_(
-"This is SolveSpace version %s.\n"
+"drafting.tools — a modified build of SolveSpace %s.\n"
 "\n"
-"For more information, see http://solvespace.com/\n"
+"This is not the official SolveSpace release. It is a\n"
+"modified version, changed in 2026, hosted at\n"
+"https://drafting.tools/\n"
+"\n"
+"Upstream SolveSpace: https://solvespace.com/\n"
+"Source for THIS build: https://drafting.tools/source\n"
 "\n"
 "SolveSpace is free software: you are free to modify\n"
 "and/or redistribute it under the terms of the GNU\n"
-"General Public License (GPL) version 3 or later.\n"
+"General Public License (GPL) version 3 or later, and\n"
+"so is this modified version.\n"
 "\n"
 "There is NO WARRANTY, to the extent permitted by\n"
 "law. For details, visit http://gnu.org/licenses/\n"

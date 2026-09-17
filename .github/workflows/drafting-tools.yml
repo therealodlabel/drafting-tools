@@ -1,0 +1,120 @@
+name: drafting.tools
+
+# Builds and checks the fork. Everything here must pass before a build is deployed.
+#
+#   test     — native build, upstream test suite, sanitizer build
+#   fuzz     — mutation fuzzing of the .slvs loader against the sanitizer build
+#   web      — the single-threaded WebAssembly build that gets deployed
+#
+on:
+  push:
+    branches: [ drafting-tools, main, master ]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  EMSDK_VERSION: "6.0.3"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential cmake ninja-build \
+            zlib1g-dev libpng-dev libcairo2-dev libfreetype6-dev libjson-c-dev \
+            libfontconfig1-dev libpangomm-1.4-dev libgl-dev libglu1-mesa-dev \
+            libspnav-dev libgtkmm-3.0-dev
+      - name: Build (native)
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DENABLE_OPENMP=ON -DENABLE_TESTS=ON -DENABLE_GUI=ON -DENABLE_CLI=ON
+          cmake --build build -j$(nproc)
+      - name: Test suite
+        run: ./build/bin/solvespace-testsuite
+      - name: Build (sanitizers)
+        run: |
+          cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_SANITIZERS=ON -DENABLE_GUI=OFF -DENABLE_CLI=ON -DENABLE_TESTS=ON
+          cmake --build build-asan -j$(nproc) \
+            --target solvespace-debugtool solvespace-cli solvespace-testsuite
+      - name: Test suite (sanitizers)
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ./build-asan/bin/solvespace-testsuite
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-tools
+          path: build-asan/bin/solvespace-debugtool
+          retention-days: 7
+
+  fuzz:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: actions/download-artifact@v4
+        with: { name: sanitizer-tools, path: bin }
+      - name: Fuzz the .slvs loader
+        run: |
+          chmod +x bin/solvespace-debugtool
+          mkdir -p seeds && cp test/*/*/*.slvs seeds/ || true
+          cp -r tools/fuzz-corpus/* seeds/ 2>/dev/null || true
+          python3 tools/fuzz_slvs.py bin/solvespace-debugtool seeds findings 400 20 | tee fuzz.log
+          # Any crash, hang or sanitizer report is a build failure.
+          if grep -q "NEW " fuzz.log; then
+            echo "::error::the loader crashed or hung on a malformed file"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: fuzz-findings, path: findings }
+
+  web:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - name: Install Emscripten ${{ env.EMSDK_VERSION }}
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git --depth 1 ~/emsdk
+          cd ~/emsdk
+          ./emsdk install "${EMSDK_VERSION}"
+          ./emsdk activate "${EMSDK_VERSION}"
+      - name: Build (web, single-threaded)
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_CLI=OFF -DENABLE_TESTS=OFF -DENABLE_COVERAGE=OFF \
+            -DENABLE_OPENMP=OFF -DENABLE_LTO=ON
+          cmake --build build-web -j$(nproc) --target solvespace
+      - name: Check the deployable set is complete and self-contained
+        run: |
+          cd build-web/bin
+          for f in solvespace.html solvespace.js solvespace.wasm solvespace.data \
+                   solvespaceui.js solvespaceui.css filemanagerui.js; do
+            test -s "$f" || { echo "::error::missing $f"; exit 1; }
+          done
+          # No third-party requests are allowed: the page must not phone anywhere.
+          if grep -qE 'https?://' solvespace.html; then
+            echo "::error::solvespace.html references an external origin:"
+            grep -oE 'https?://[^"'\''<> ]+' solvespace.html
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: drafting-tools-web
+          path: |
+            build-web/bin/solvespace.html
+            build-web/bin/solvespace.js
+            build-web/bin/solvespace.wasm
+            build-web/bin/solvespace.data
+            build-web/bin/solvespaceui.js
+            build-web/bin/solvespaceui.css
+            build-web/bin/filemanagerui.js

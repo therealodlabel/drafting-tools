@@ -2,8 +2,11 @@
 <html><!--
  --><head><!--
      --><meta charset="utf-8"><!--
-     --><title>SolveSpace Web Edition (EXPERIMENTAL)</title><!--
-     --><link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.1.1/css/all.css" integrity="sha384-O8whS3fhG2OnA5Kas0Y9l3cfpmYjapjI0E4theH4iuMD+pLhbf6JI0jIMfYcK3yZ" crossorigin="anonymous"><!--
+     --><title>drafting.tools</title><!--
+     --><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><!--
+     --><meta name="referrer" content="no-referrer"><!--
+     --><meta name="description" content="Parametric 2D/3D CAD in the browser. No account, no tracking, nothing leaves your machine."><!--
+     --><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161616'/%3E%3Cpath d='M6 24 L16 7 L26 24 Z' fill='none' stroke='%2364c8a0' stroke-width='2.2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='7' r='2.4' fill='%2364c8a0'/%3E%3C/svg%3E"><!--
      --><link rel="stylesheet" href="solvespaceui.css"><!--
      --><script src="solvespaceui.js"></script><!--
      --><script src="filemanagerui.js"></script><!--
@@ -14,10 +17,19 @@
                 <div id="spinner"></div>
                 <div id="status">Downloading...</div>
                 <div id="crash" style="display:none;">
-                    SolveSpace has crashed. See console for details.<br>
-                    The Web Edition of SolveSpace is experimental,<br>
-                    and may not be as reliable as the Desktop Edition.<br>
-                    <a href="javascript:window.location.reload()">Restart</a>
+                    Something went wrong and the editor stopped.<br>
+                    Details are in the browser console.<br>
+                    <a href="javascript:window.location.reload()">Restart</a> —
+                    your last autosave is offered when it reloads.
+                </div>
+                <div id="nowebgl" style="display:none;">
+                    <b>This browser can't give the editor a 3D canvas.</b><br>
+                    drafting.tools needs WebGL, which is usually blocked by<br>
+                    a remote-desktop session, a virtual machine, or disabled<br>
+                    hardware acceleration in the browser's settings.<br>
+                    <br>
+                    Turn on hardware acceleration, or open the page on a<br>
+                    machine with a graphics driver, and reload.
                 </div>
                 <progress id="progress" value="0" max="100" hidden="1"></progress>
             </div>
@@ -43,8 +55,19 @@
         var statusElement   = document.getElementById('status');
         var progressElement = document.getElementById('progress');
         var crashElement    = document.getElementById('crash');
+        var noWebglElement  = document.getElementById('nowebgl');
         var canvas0Element  = document.getElementById('canvas0');
         var canvas1Element  = document.getElementById('canvas1');
+
+        // Called from the C++ side when no WebGL context can be created at all,
+        // so that the user gets an explanation instead of a black canvas.
+        window.solvespaceReportNoWebGL = function() {
+            if(noWebglElement.style.display === '') return;
+            spinnerElement.style.display = 'none';
+            statusElement.style.display = 'none';
+            noWebglElement.style.display = '';
+            splashElement.style.display = '';
+        };
 
         canvas0Element.oncontextmenu = function(event) { event.preventDefault(); }
         canvas1Element.oncontextmenu = function(event) { event.preventDefault(); }

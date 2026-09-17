@@ -874,6 +874,13 @@ static Platform::MessageDialog::Response LocateImportedFile(const Platform::Path
     Platform::MessageDialogRef dialog = CreateMessageDialog(SS.GW.window);
 
     using Platform::MessageDialog;
+    if(!dialog) {
+        // Headless builds (the CLI, the test harness) have no dialogs. Decline the
+        // relocation rather than dereferencing a null dialog, which is what used to
+        // happen whenever a linked part file was missing.
+        return MessageDialog::Response::NO;
+    }
+
     dialog->SetType(MessageDialog::Type::QUESTION);
     dialog->SetTitle(C_("title", "Missing File"));
     dialog->SetMessage(ssprintf(C_("dialog", "The linked file “%s” is not present."),

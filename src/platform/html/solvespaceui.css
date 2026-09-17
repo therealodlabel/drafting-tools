@@ -117,10 +117,13 @@ main {
     margin: 2px;
     padding: 3px;
 }
+/* Check marks, radio dots and submenu arrows are drawn with inline SVG rather than
+   an icon webfont, so that the page makes no third-party requests. */
 .menu > li::before, .menu > li::after {
-    font-family: 'Font Awesome 5 Free';
-    font-weight: 900;
     font-size: 12px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 12px 12px;
 }
 .menu > li.hover,
 .menu > li.selected,
@@ -142,16 +145,24 @@ main {
     width: 24px;
 }
 .menu > li.check::before {
-    content: '\f0c8';
+    content: '';
+    height: 12px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1.5' y='1.5' width='13' height='13' rx='2' fill='none' stroke='%23d0d0d0' stroke-width='1.6'/%3E%3C/svg%3E");
 }
 .menu > li.check.active::before {
-    content: '\f14a';
+    content: '';
+    height: 12px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1.5' y='1.5' width='13' height='13' rx='2' fill='none' stroke='%23d0d0d0' stroke-width='1.6'/%3E%3Cpath d='M4 8.4 L6.9 11.3 L12.2 5' fill='none' stroke='%23d0d0d0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 .menu > li.radio::before {
-    content: '\f111';
+    content: '';
+    height: 12px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.2' fill='none' stroke='%23d0d0d0' stroke-width='1.6'/%3E%3C/svg%3E");
 }
 .menu > li.radio.active::before {
-    content: '\f192';
+    content: '';
+    height: 12px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6.2' fill='none' stroke='%23d0d0d0' stroke-width='1.6'/%3E%3Ccircle cx='8' cy='8' r='3.2' fill='%23d0d0d0'/%3E%3C/svg%3E");
 }
 
 /* Separator menu items */
@@ -177,7 +188,11 @@ main {
     padding-right: 31px;
 }
 .menu > li.has-submenu::after {
-    content: '\f0da';
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M5.5 2.5 L11.5 8 L5.5 13.5 Z' fill='%23d0d0d0'/%3E%3C/svg%3E");
 }
 .menu > li.selected > .menu,
 .menu > li.hover > .menu,

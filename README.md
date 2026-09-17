@@ -1,3 +1,16 @@
+# drafting.tools
+
+> **This is a modified version of SolveSpace**, not an official release.
+> It is maintained for [drafting.tools](https://drafting.tools/) — a hosted, no-account,
+> no-tracking browser build. Upstream SolveSpace is at <https://solvespace.com/> and
+> deserves the credit for the program; the bugs in this fork are ours.
+>
+> What was changed, and the licence obligations that come with serving it, are in
+> [NOTICE-drafting-tools.md](NOTICE-drafting-tools.md).
+> Build instructions for this fork: `tools/` and `.github/workflows/drafting-tools.yml`.
+
+---
+
 # SolveSpace
 
 <img src="res/freedesktop/solvespace-scalable.svg" width="70" height="70" alt="SolveSpace Logo" align="left">

@@ -25,4 +25,6 @@
 	url = https://github.com/microsoft/mimalloc
 [submodule "extlib/eigen"]
 	path = extlib/eigen
-	url = https://gitlab.com/libeigen/eigen.git
+	# Upstream is https://gitlab.com/libeigen/eigen.git, which some corporate and
+	# sandboxed networks block; this GitHub mirror carries the identical commits.
+	url = https://github.com/eigen-mirror/eigen.git

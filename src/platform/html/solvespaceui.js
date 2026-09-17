@@ -659,7 +659,9 @@ class FileDownloadHelper {
         const linkElem = document.createElement("a");
         //let downloadfilename = "solvespace_browser-";
         //downloadfilename += `${GetCurrentDateTimeString()}.slvs`;
-        let downloadfilename = filename;
+        // Offer the plain file name; passing the whole pseudo-filesystem path made
+        // browsers sanitise it into names like "_data__part".
+        let downloadfilename = filename.split('/').pop();
         linkElem.setAttribute("download", downloadfilename);
         linkElem.setAttribute("href", blobURL);
         // WORKAROUND: FIXME(emscripten)

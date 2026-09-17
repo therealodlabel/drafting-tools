@@ -688,6 +688,12 @@ public:
 
     void GenerateAll(Generate type = Generate::DIRTY, bool andFindFree = false,
                      bool genForBBox = false);
+    // Depth of the GenerateAll() recursion. A damaged file can make pruning and
+    // active-group repair call each other forever, so the recursion is bounded and
+    // reported rather than allowed to overflow the stack (fatal in a browser).
+    int generateDepth = 0;
+    enum { MAX_GENERATE_DEPTH = 64 };
+    bool IsGenerating() const { return generateDepth > 0; }
     void SolveGroup(hGroup hg, bool andFindFree);
     void SolveGroupAndReport(hGroup hg, bool andFindFree);
     SolveResult TestRankForGroup(hGroup hg, int *rank = NULL);

@@ -955,7 +955,12 @@ void GraphicsWindow::EnsureValidActives() {
             activeGroup = SS.CreateDefaultDrawingGroup();
             // We've created the default group, but not the workplane entity;
             // do it now so that drawing mode isn't switched to "Free in 3d".
-            SS.GenerateAll(SolveSpaceUI::Generate::ALL);
+            // Skip it when a regeneration is already running: that regeneration
+            // will pick the new group up, and recursing back into it from here is
+            // how a damaged file used to spin until the stack ran out.
+            if(!SS.IsGenerating()) {
+                SS.GenerateAll(SolveSpaceUI::Generate::ALL);
+            }
         } else {
             activeGroup = SK.groupOrder[i];
         }

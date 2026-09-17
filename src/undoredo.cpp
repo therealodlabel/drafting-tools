@@ -10,7 +10,10 @@
 namespace SolveSpace {
 
 void SolveSpaceUI::UndoRemember() {
-    unsaved = true;
+    if(!unsaved) {
+        unsaved = true;
+        UpdateWindowTitles();
+    }
     PushFromCurrentOnto(&undo);
     UndoClearStack(&redo);
     UndoEnableMenus();
