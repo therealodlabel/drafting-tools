@@ -617,7 +617,7 @@ public:
     bool ReloadAllLinked(const Platform::Path &filename, bool canCancel = false);
     // And the various export options
     void ExportAsPngTo(const Platform::Path &filename);
-    void ExportMeshTo(const Platform::Path &filename);
+    bool ExportMeshTo(const Platform::Path &filename);
     void ExportMeshAsStlTo(FILE *f, SMesh *sm);
     void ExportMeshAsObjTo(FILE *fObj, FILE *fMtl, SMesh *sm);
     void ExportMeshAsThreeJsTo(FILE *f, const Platform::Path &filename,
@@ -686,6 +686,7 @@ public:
     bool PruneRequestsAndConstraints(hGroup hg);
     bool PruneBrokenEntities(hGroup hg);
     static void ShowNakedEdges(bool reportOnlyWhenNotOkay);
+    static void WarnIfNotPrintable();
 
     enum class Generate : uint32_t {
         DIRTY,

@@ -808,7 +808,7 @@ void VectorFileWriter::BezierAsNonrationalCubic(SBezier *sb, int depth) {
 //-----------------------------------------------------------------------------
 // Export a triangle mesh, in the requested format.
 //-----------------------------------------------------------------------------
-void SolveSpaceUI::ExportMeshTo(const Platform::Path &filename) {
+bool SolveSpaceUI::ExportMeshTo(const Platform::Path &filename) {
     SS.exportMode = true;
     GenerateAll(Generate::ALL);
 
@@ -818,23 +818,29 @@ void SolveSpaceUI::ExportMeshTo(const Platform::Path &filename) {
     SMesh *m = &(SK.GetGroup(SS.GW.activeGroup)->displayMesh);
     if(m->IsEmpty()) {
         Error(_("Active group mesh is empty; nothing to export."));
-        return;
+        return false;
     }
+
+    // Warn before the file is written, not after: a mesh that is not closed will
+    // load in a slicer and then print as something other than the part.
+    WarnIfNotPrintable();
 
     FILE *f = OpenFile(filename, "wb");
     if(!f) {
         Error("Couldn't write to '%s'", filename.raw.c_str());
-        return;
+        return false;
     }
-    ShowNakedEdges(/*reportOnlyWhenNotOkay=*/true);
+
+    bool ok = true;
     if(filename.HasExtension("stl")) {
         ExportMeshAsStlTo(f, m);
     } else if(filename.HasExtension("obj")) {
         Platform::Path mtlFilename = filename.WithExtension("mtl");
         FILE *fMtl = OpenFile(mtlFilename, "wb");
         if(!fMtl) {
-            Error("Couldn't write to '%s'", filename.raw.c_str());
-            return;
+            Error("Couldn't write to '%s'", mtlFilename.raw.c_str());
+            fclose(f);
+            return false;
         }
 
         fprintf(f, "mtllib %s\n", mtlFilename.FileName().c_str());
@@ -850,6 +856,7 @@ void SolveSpaceUI::ExportMeshTo(const Platform::Path &filename) {
     } else {
         Error("Can't identify output file type from file extension of "
               "filename '%s'; try .stl, .obj, .js, .html.", filename.raw.c_str());
+        ok = false;
     }
 
     fclose(f);
@@ -857,6 +864,7 @@ void SolveSpaceUI::ExportMeshTo(const Platform::Path &filename) {
     SS.justExportedInfo.showOrigin = false;
     SS.justExportedInfo.draw = true;
     GW.Invalidate();
+    return ok;
 }
 
 //-----------------------------------------------------------------------------

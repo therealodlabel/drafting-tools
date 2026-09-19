@@ -780,7 +780,11 @@ msgstr "&Save"
 msgid "Save &As..."
 msgstr "Save &As..."
 
-#: graphicswin.cpp:48
+#: graphicswin.cpp:50
+msgid "Export &STL for Printing"
+msgstr "Export &STL for Printing"
+
+#: graphicswin.cpp:51
 msgid "Export &Image..."
 msgstr "Export &Image..."
 

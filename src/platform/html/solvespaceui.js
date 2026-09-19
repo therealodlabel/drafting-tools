@@ -1,3 +1,39 @@
+/* Settings storage.
+ *
+ * localStorage is shared by every page served from this origin, so each key is
+ * namespaced rather than written at the top level. Both helpers swallow their
+ * exceptions: localStorage throws outright when site data is blocked, and when
+ * the quota is full, and neither is a reason for the program to fail to start.
+ */
+const SOLVESPACE_SETTINGS_PREFIX = 'draftingtools.';
+
+function solvespaceSettingSet(key, value) {
+    try {
+        window.localStorage.setItem(SOLVESPACE_SETTINGS_PREFIX + key, value);
+    } catch (e) {
+        /* Storage disabled or full; the setting just does not persist. */
+    }
+}
+
+function solvespaceSettingGet(key) {
+    try {
+        const v = window.localStorage.getItem(SOLVESPACE_SETTINGS_PREFIX + key);
+        if (v !== null) {
+            return v;
+        }
+        /* Settings written by an earlier build, before the keys were namespaced;
+         * move them over so nobody loses their preferences on an update. */
+        const old = window.localStorage.getItem(key);
+        if (old !== null) {
+            window.localStorage.setItem(SOLVESPACE_SETTINGS_PREFIX + key, old);
+            window.localStorage.removeItem(key);
+        }
+        return old;
+    } catch (e) {
+        return null;
+    }
+}
+
 function isModal() {
     var hasModal = !!document.querySelector('.modal');
     var hasMenuBar = !!document.querySelector('.menubar .selected');

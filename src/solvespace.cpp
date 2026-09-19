@@ -812,6 +812,35 @@ void SolveSpaceUI::MenuFile(Command id) {
             break;
         }
 
+        case Command::EXPORT_STL: {
+            // The shortest path from a finished solid to something a slicer can
+            // open: STL, millimetres, no format question. Everything else about
+            // an export is a choice; for 3D printing none of it is.
+            Platform::Path stlFile;
+            if(!SS.saveFile.IsEmpty()) {
+                stlFile = SS.saveFile.WithExtension("stl");
+            } else {
+                Platform::FileDialogRef dialog = Platform::CreateSaveFileDialog(SS.GW.window);
+                dialog->AddFilters({ Platform::MeshFileFilters[0] });
+                dialog->SuggestFilename(Platform::Path::From("untitled.stl"));
+                if(!dialog->RunModal()) break;
+                stlFile = dialog->GetFilename();
+            }
+
+            // An STL carries no units; every slicer reads it as millimetres, which
+            // is what the sketch is in, so export at 1:1 whatever the 2D export
+            // scale happens to be set to.
+            double savedScale = SS.exportScale;
+            SS.exportScale = 1.0;
+            SS.ExportMeshTo(stlFile);
+            SS.exportScale = savedScale;
+
+            if(SS.OnSaveFinished) {
+                SS.OnSaveFinished(stlFile, false, false);
+            }
+            break;
+        }
+
         case Command::EXPORT_MESH: {
             Platform::FileDialogRef dialog = Platform::CreateSaveFileDialog(SS.GW.window);
             dialog->AddFilters(Platform::MeshFileFilters);
@@ -1084,6 +1113,45 @@ void SolveSpaceUI::MenuAnalyze(Command id) {
 
         default: ssassert(false, "Unexpected menu ID");
     }
+}
+
+// Before a mesh export, check the one property a 3D print actually depends on:
+// that the surface is closed and does not cross itself. Upstream reports this in
+// the language of the mesh ("naked edges"); the useful thing to say at export
+// time is what it means for the print and where to look.
+void SolveSpaceUI::WarnIfNotPrintable() {
+    SS.nakedEdges.Clear();
+
+    Group *g = SK.GetGroup(SS.GW.activeGroup);
+    SKdNode *root = SKdNode::From(&(g->displayMesh));
+    bool inters, leaks;
+    root->MakeCertainEdgesInto(&(SS.nakedEdges),
+        EdgeKind::NAKED_OR_SELF_INTER, /*coplanarIsInter=*/true, &inters, &leaks);
+
+    if(!inters && !leaks && SS.nakedEdges.l.IsEmpty()) return;
+
+    SS.GW.Invalidate();
+
+    std::string problem;
+    if(leaks) {
+        problem = _("it has holes in its surface (naked edges)");
+    }
+    if(inters) {
+        if(!problem.empty()) problem += _(", and ");
+        problem += _("it crosses through itself");
+    }
+    if(problem.empty()) {
+        problem = _("some of its edges are suspect");
+    }
+
+    Error(_("This model is not watertight: %s. %d problematic edges are now "
+            "highlighted in red.\n\n"
+            "The file is still being written, but a slicer will either refuse it "
+            "or silently repair it, and the printed part may not match the model. "
+            "The usual causes are a boolean between tangent faces and a sketch "
+            "that does not close.\n\n"
+            "Analyze \xe2\x86\x92 Show Naked Edges repeats this check at any time."),
+          problem.c_str(), SS.nakedEdges.l.n);
 }
 
 void SolveSpaceUI::ShowNakedEdges(bool reportOnlyWhenNotOkay) {

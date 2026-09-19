@@ -3,6 +3,7 @@
 //
 // Copyright 2018 whitequark
 //-----------------------------------------------------------------------------
+#include <cmath>
 #include <emscripten.h>
 #include <emscripten/val.h>
 #include <emscripten/html5.h>
@@ -82,40 +83,59 @@ void FatalError(const std::string &message) {
 // Settings
 //-----------------------------------------------------------------------------
 
+// Settings are kept in localStorage, which is shared by every page on the origin,
+// so every key is namespaced. Reads and writes go through JS helpers that swallow
+// the exceptions localStorage throws when storage is disabled or full: losing a
+// preference is acceptable, failing to start is not.
 class SettingsImplHtml : public Settings {
+    static void Store(const std::string &key, const std::string &value) {
+        val::global("window").call<void>("solvespaceSettingSet", key, value);
+    }
+
+    // Returns the stored string, or an empty val when the key is absent or
+    // storage is unavailable.
+    static val Load(const std::string &key) {
+        return val::global("window").call<val>("solvespaceSettingGet", key);
+    }
+
+    static bool IsMissing(const val &value) {
+        return value.isNull() || value.isUndefined();
+    }
+
 public:
     void FreezeInt(const std::string &key, uint32_t value) {
-        val::global("localStorage").call<void>("setItem", key, value);
+        Store(key, std::to_string(value));
     }
 
     uint32_t ThawInt(const std::string &key, uint32_t defaultValue = 0) {
-        val value = val::global("localStorage").call<val>("getItem", key);
-        if(value == val::null())
-        return defaultValue;
-        return val::global("parseInt")(value, 0).as<int>();
+        val value = Load(key);
+        if(IsMissing(value)) return defaultValue;
+        double parsed = val::global("parseInt")(value, 10).as<double>();
+        // A hand-edited or truncated entry must not poison the program.
+        if(!std::isfinite(parsed)) return defaultValue;
+        return (uint32_t)parsed;
     }
 
     void FreezeFloat(const std::string &key, double value) {
-        val::global("localStorage").call<void>("setItem", key, value);
+        Store(key, std::to_string(value));
     }
 
     double ThawFloat(const std::string &key, double defaultValue = 0.0) {
-        val value = val::global("localStorage").call<val>("getItem", key);
-        if(value == val::null())
-        return defaultValue;
-        return val::global("parseFloat")(value).as<double>();
+        val value = Load(key);
+        if(IsMissing(value)) return defaultValue;
+        double parsed = val::global("parseFloat")(value).as<double>();
+        if(!std::isfinite(parsed)) return defaultValue;
+        return parsed;
     }
 
     void FreezeString(const std::string &key, const std::string &value) {
-        val::global("localStorage").call<void>("setItem", key, value);
+        Store(key, value);
     }
 
     std::string ThawString(const std::string &key,
                            const std::string &defaultValue = "") {
-        val value = val::global("localStorage").call<val>("getItem", key);
-        if(value == val::null()) {
-            return defaultValue;
-        }
+        val value = Load(key);
+        if(IsMissing(value)) return defaultValue;
         return value.as<std::string>();
     }
 };
@@ -370,6 +390,12 @@ public:
     }
 
     void calculateCenterPosition(const EmscriptenTouchEvent& emEvent, double& dst_x, double& dst_y) {
+        // touchend can arrive with no remaining touches; dividing by that put a
+        // NaN into the mouse position, and a NaN position selects nothing and
+        // moves the view nowhere. Keep the last known centre instead.
+        if (emEvent.numTouches <= 0) {
+            return;
+        }
         double x = 0;
         double y = 0;
         for (int i = 0; i < emEvent.numTouches; i++) {
@@ -423,13 +449,18 @@ public:
 
     void createMouseEventRELEASE(const EmscriptenTouchEvent& emEvent, MouseEvent& dst_mouseevent) {
         this->calculateCenterPosition(emEvent, this->centerX, this->centerY);
+        // Which button is released depends on how many fingers were down before
+        // this event, so read that first: the count was being cleared and then
+        // read back, so every release reported the middle button and a one-finger
+        // tap never delivered the left-button release that finishes a click.
+        int releasedTouches = this->previousNumTouches;
         this->previousNumTouches = 0;
         dst_mouseevent.type = MouseEvent::Type::RELEASE;
         dst_mouseevent.x = this->centerX;
         dst_mouseevent.y = this->centerY;
         dst_mouseevent.shiftDown = emEvent.shiftKey;
         dst_mouseevent.controlDown = emEvent.ctrlKey;
-        switch(this->previousNumTouches) {
+        switch(releasedTouches) {
         case 1:
             dst_mouseevent.button = MouseEvent::Button::LEFT;
             break;
@@ -471,13 +502,13 @@ public:
         event.y = this->centerY;
         event.shiftDown = emEvent.shiftKey;
         event.controlDown = emEvent.ctrlKey;
-        // FIXME(emscripten): best value range for scrollDelta ?
+        // Clamp the step, keeping the direction: the sign used to be read back
+        // from the already-clamped value, so a fast pinch closed zoomed in.
         event.scrollDelta = (newDistance - this->previousPinchDistance) / 25.0;
-        if (std::abs(event.scrollDelta) > 2) {
+        if (event.scrollDelta > 2) {
             event.scrollDelta = 2;
-            if (std::signbit(event.scrollDelta)) {
-                event.scrollDelta *= -1.0;
-            }
+        } else if (event.scrollDelta < -2) {
+            event.scrollDelta = -2;
         }
         this->previousPinchDistance = newDistance;
     }
@@ -1364,11 +1395,16 @@ public:
     
     void SuggestFilename(Platform::Path path) override {
         dbp("FileDialogImplHtml::SuggestFilename(): path=\"%s\"", path.raw.c_str());
-        // Keep the extension: the export format is chosen from it, and this dialog
-        // has no format picker to fall back on.
-        std::string name = path.FileName();
-        if(name.empty()) name = path.FileStem();
-        SetFilename(Platform::Path::From(name));
+        // The export format is taken from the extension and this dialog has no
+        // format picker, so the suggested name has to carry an extension this
+        // dialog actually accepts. Callers pass the sketch's own name, which for
+        // any export but "save as" is a .slvs the format code cannot write.
+        std::string stem = path.FileStem();
+        if(stem.empty()) stem = "untitled";
+        std::string ext = path.Extension();
+        if(!FilterAccepts(ext)) ext = DefaultExtension();
+        if(!ext.empty()) stem += "." + ext;
+        SetFilename(Platform::Path::From(stem));
     }
 
     // The first extension of the first filter, e.g. "slvs" or "stl".
@@ -1378,6 +1414,22 @@ public:
         if(comma != std::string::npos) ext = ext.substr(0, comma);
         if(!ext.empty() && ext.front() == '.') ext = ext.substr(1);
         return ext;
+    }
+
+    // True when `ext` (given without the dot) is one of this dialog's filters.
+    bool FilterAccepts(const std::string &ext) const {
+        if(ext.empty()) return false;
+        std::string needle = ".";
+        for(char c : ext) needle += (char)tolower((unsigned char)c);
+        size_t start = 0;
+        while(start <= filters.length()) {
+            size_t comma = filters.find(',', start);
+            size_t len = (comma == std::string::npos) ? std::string::npos : comma - start;
+            if(filters.substr(start, len) == needle) return true;
+            if(comma == std::string::npos) break;
+            start = comma + 1;
+        }
+        return false;
     }
 
     void AddFilter(std::string name, std::vector<std::string> extensions) override {

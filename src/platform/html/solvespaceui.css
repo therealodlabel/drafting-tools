@@ -17,6 +17,12 @@ html, body, canvas, #splash, #container {
 }
 body {
     overflow: hidden;
+    /* Stop the browser's own gestures from competing with the ones the canvas
+       handles: pull-to-refresh while orbiting, and the double-tap zoom that
+       otherwise swallows every second tap on a phone. */
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* Splashscreen */
@@ -304,6 +310,12 @@ body.mnemonic .label > u {
 canvas {
     border: 0px none;
     background-color: black;
+    /* The drawing gestures are ours; the browser must not pan or pinch-zoom the
+       page out from under them. */
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 #container {
@@ -356,4 +368,56 @@ canvas {
 #view_separator {
     width: 4px;
     background: hsl(0, 0%, 20%);
+}
+
+/* ---------------------------------------------------------------------------
+   Touch and small screens.
+
+   The layout above assumes a mouse and a desktop-sized window: 19px menu rows,
+   a text window with a 410px floor sitting beside the drawing. On a phone that
+   leaves a sliver of 3D view next to a panel wider than the screen, and targets
+   too small to hit. These rules do not change the desktop layout.
+   --------------------------------------------------------------------------- */
+
+/* Anything driven by a finger or a stylus rather than a mouse. */
+@media (pointer: coarse) {
+    /* 19px rows are below every platform's minimum tap target. */
+    .menu > li {
+        height: auto;
+        min-height: 34px;
+    }
+    .menu > li > .label {
+        font-size: 17px;
+    }
+    .button {
+        padding: 10px 16px;
+        min-height: 34px;
+    }
+    /* iOS zooms the whole page when focusing an input below 16px. */
+    .editor {
+        font-size: 16px;
+    }
+}
+
+/* Portrait phones and small tablets: stack the drawing over the text window
+   instead of putting them side by side. */
+@media (max-width: 900px) {
+    #container {
+        flex-direction: column;
+    }
+    #container0 {
+        flex-basis: 62%;
+        min-height: 0;
+    }
+    #container1parent {
+        flex-basis: 38%;
+        min-width: 0;
+        min-height: 0;
+    }
+    .modal > div {
+        top: 8%;
+        max-width: 94vw;
+        max-height: 84vh;
+        overflow: auto;
+    }
 }
