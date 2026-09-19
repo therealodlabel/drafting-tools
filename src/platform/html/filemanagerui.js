@@ -397,6 +397,9 @@ class FileManagerUI {
                 const fs = FS.open(path, "w");
                 FS.write(fs, u8array, 0, u8array.length, 0);
                 FS.close(fs);
+                if(typeof solvespaceRequestPersist === "function") {
+                    solvespaceRequestPersist();
+                }
                 resolve(); 
             }
         });

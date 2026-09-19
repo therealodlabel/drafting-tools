@@ -127,8 +127,13 @@ void SolveSpaceUI::Init() {
         if(rawPath.empty()) continue;
         recentFiles.push_back(Platform::Path::From(rawPath));
     }
-    // Autosave timer
+    // Autosave timer. In a browser a tab can be closed at any moment and there is
+    // no crash-recovery habit to fall back on, so autosave more often there.
+#if defined(__EMSCRIPTEN__)
+    autosaveInterval = settings->ThawInt("AutosaveInterval", 1);
+#else
     autosaveInterval = settings->ThawInt("AutosaveInterval", 5);
+#endif
     // Locale
     std::string locale = settings->ThawString("Locale", "");
     if(!locale.empty()) {
@@ -618,12 +623,21 @@ void SolveSpaceUI::Autosave()
 {
     ScheduleAutosave();
 
-    if(!saveFile.IsEmpty() && unsaved) {
-        Platform::Path saveFileName = saveFile.WithExtension(BACKUP_EXT);
-        SaveToFile(saveFileName);
-        if (this->OnSaveFinished) {
-            this->OnSaveFinished(saveFileName, false, true);
-        }
+    if(!unsaved) return;
+
+    Platform::Path saveFileName;
+    if(!saveFile.IsEmpty()) {
+        saveFileName = saveFile.WithExtension(BACKUP_EXT);
+    } else if(!recoveryFile.IsEmpty()) {
+        // Never saved, but there is somewhere to keep a copy for recovery.
+        saveFileName = recoveryFile;
+    } else {
+        return;
+    }
+
+    SaveToFile(saveFileName);
+    if (this->OnSaveFinished) {
+        this->OnSaveFinished(saveFileName, false, true);
     }
 }
 
@@ -631,6 +645,10 @@ void SolveSpaceUI::RemoveAutosave()
 {
     Platform::Path autosaveFile = saveFile.WithExtension(BACKUP_EXT);
     RemoveFile(autosaveFile);
+    // The work is saved under its own name now, so the recovery copy is stale.
+    if(!recoveryFile.IsEmpty()) {
+        RemoveFile(recoveryFile);
+    }
 }
 
 bool SolveSpaceUI::OkayToStartNewFile() {

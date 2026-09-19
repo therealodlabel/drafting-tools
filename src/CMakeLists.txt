@@ -320,7 +320,9 @@ if(ENABLE_GUI)
         # Add internal quotes to paths used in the response file to ensure that paths
         # that contain spaces are handled correctly
         set(RESP_LINK_FLAGS
-            --bind --shell-file "\"${SHELL}\"" --no-heap-copy
+            --bind --shell-file "\"${SHELL}\""
+            # IDBFS backs /data, so a visitor's files survive a reload.
+            -lidbfs.js
             "-s ALLOW_MEMORY_GROWTH=1" "-s WASM=1"
             "-s ASYNCIFY=1" "-s DYNCALLS=1" "-s ASSERTIONS=1"
             "-s TOTAL_STACK=33554432" "-s TOTAL_MEMORY=134217728")

@@ -603,6 +603,10 @@ public:
     std::function<void(const Platform::Path &filename, bool is_saveAs, bool is_autosave)> OnSaveFinished;
     bool LoadFromFile(const Platform::Path &filename, bool canCancel = false);
     void UpgradeLegacyData();
+    // Where to autosave a sketch that has never been saved, so that closing the
+    // tab or crashing does not lose it. Empty except on platforms that have a
+    // private place to put it (the web build).
+    Platform::Path recoveryFile;
     // Drops anything inconsistent from a freshly loaded sketch; returns false
     // if nothing usable is left.
     bool ValidateLoadedSketch();

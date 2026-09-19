@@ -1469,6 +1469,38 @@ void OpenInBrowser(const std::string &url) {
 }
 
 
+// Where an unsaved sketch is autosaved, so that closing the tab does not lose it.
+static const char *RECOVERY_FILE = "/data/.recovered-sketch.slvs";
+
+// If a previous visit left unsaved work behind, offer it back.
+static void OfferRecoveredSketch() {
+    Platform::Path recovery = Platform::Path::From(RECOVERY_FILE);
+    if(!Platform::FileExists(recovery)) return;
+
+    MessageDialogRef dialog = CreateMessageDialog(SS.GW.window);
+    if(!dialog) return;
+    dialog->SetType(MessageDialog::Type::QUESTION);
+    dialog->SetTitle(C_("title", "Unsaved Work"));
+    dialog->SetMessage(C_("dialog", "Work from your last visit was not saved."));
+    dialog->SetDescription(C_("dialog", "Do you want to pick up where you left off?\n\n"
+                                        "If you decline, it is discarded."));
+    dialog->AddButton(C_("button", "&Restore"), MessageDialog::Response::YES,
+                      /*isDefault=*/true);
+    dialog->AddButton(C_("button", "&Discard"), MessageDialog::Response::NO);
+
+    if(dialog->RunModal() == MessageDialog::Response::YES) {
+        if(SS.LoadFromFile(recovery, /*canCancel=*/false)) {
+            SS.AfterNewFile();
+            // It is recovered work, not a saved file: it still needs a name.
+            SS.saveFile = Platform::Path();
+            SS.unsaved = true;
+            SS.UpdateWindowTitles();
+            return;
+        }
+    }
+    Platform::RemoveFile(recovery);
+}
+
 void OnSaveFinishedCallback(const Platform::Path& filename, bool is_saveAs, bool is_autosave) {
     dbp("OnSaveFinished(): %s, is_saveAs=%d, is_autosave=%d\n", filename.FileName().c_str(), is_saveAs, is_autosave);
     val::global("window").call<void>("saveFileDone", filename.raw, is_saveAs, is_autosave);
@@ -1481,6 +1513,10 @@ std::vector<std::string> InitGui(int argc, char **argv) {
     // dbp("Set onSaveFinished");
     SS.OnSaveFinished = OnSaveFinishedCallback;
 
+    // Autosave unsaved work into the persistent filesystem, so a closed tab or a
+    // crash is recoverable.
+    SS.recoveryFile = Platform::Path::From(RECOVERY_FILE);
+
     // FIXME(emscripten): get locale from user preferences
     SetLocale("en_US");
 
@@ -1492,6 +1528,8 @@ static void MainLoopIteration() {
 }
 
 void RunGui() {
+    // SS.Init() has run by now, so the window exists and a dialog can be shown.
+    OfferRecoveredSketch();
     emscripten_set_main_loop(MainLoopIteration, 0, /*simulate_infinite_loop=*/true);
 }
 

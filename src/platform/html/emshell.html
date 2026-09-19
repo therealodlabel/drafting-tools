@@ -73,7 +73,25 @@
         canvas1Element.oncontextmenu = function(event) { event.preventDefault(); }
 
         var Module = {
-            preRun: [],
+            preRun: [function() {
+                // Files live in an IndexedDB-backed filesystem, so work survives a
+                // reload or a closed tab. Startup waits for the load to finish.
+                try {
+                    FS.mkdir('/data');
+                } catch(e) { /* already there */ }
+                try {
+                    FS.mount(IDBFS, {}, '/data');
+                } catch(e) {
+                    console.error('Persistent storage unavailable, files will be ' +
+                                  'lost on reload:', e);
+                    return;
+                }
+                Module.addRunDependency('persistent-files');
+                FS.syncfs(true, function(err) {
+                    if(err) console.error('Could not read stored files:', err);
+                    Module.removeRunDependency('persistent-files');
+                });
+            }],
             postRun: [],
             print: console.log,
             printErr: console.error,

@@ -681,9 +681,34 @@ class FileDownloadHelper {
     }
 };
 
+/**
+ * Write the in-memory filesystem back to IndexedDB. Debounced, because it is
+ * called after every save, autosave and upload.
+ */
+let __persistTimer = null;
+let __persistPending = false;
+function solvespaceRequestPersist() {
+    __persistPending = true;
+    if(__persistTimer !== null) return;
+    __persistTimer = setTimeout(function() {
+        __persistTimer = null;
+        if(!__persistPending) return;
+        __persistPending = false;
+        try {
+            FS.syncfs(false, function(err) {
+                if(err) console.error('Could not store files:', err);
+            });
+        } catch(e) {
+            console.error('Could not store files:', e);
+        }
+    }, 500);
+}
+
 function saveFileDone(filename, isSaveAs, isAutosave) {
     console.log(`saveFileDone(${filename}, ${isSaveAs}, ${isAutosave})`);
+    solvespaceRequestPersist();
     if (isAutosave) {
+        // An autosave is for recovery only; it is stored, not offered as a download.
         return;
     }
     const fileDownloadHelper = new FileDownloadHelper();
