@@ -35,6 +35,7 @@ void Group::Clear() {
     impEntity.Clear();
     // remap is the only one that doesn't get recreated when we regen
     remap.clear();
+    nextRemapId = 0;
 }
 
 void Group::AddParam(ParamList *param, hParam hp, double v) {
@@ -868,9 +869,19 @@ hEntity Group::Remap(hEntity in, int copyNumber) {
         // handle value to generate an entity handle, the mapped value must fit in a 16-bit
         // variable.
         // This limit can be lifted once the handle values are extended to 64-bit.
-        ssassert(remap.size() < (1 << 16) - 1, "Too many entities in group");
+        if(nextRemapId == 0) {
+            // Continue past the largest id already in the table rather than assuming
+            // the ids are exactly 1..size(); a file may say otherwise, and reusing an
+            // id makes the group generate two entities with the same handle.
+            uint32_t maxId = 0;
+            for(const auto &entry : remap) {
+                maxId = std::max(maxId, entry.second.v);
+            }
+            nextRemapId = maxId + 1;
+        }
+        ssassert(nextRemapId < (1 << 16) - 1, "Too many entities in group");
         std::tie(it, std::ignore) =
-            remap.insert({ { in, copyNumber }, { (uint32_t)remap.size() + 1 } });
+            remap.insert({ { in, copyNumber }, { nextRemapId++ } });
     }
     return h.entity(it->second.v);
 }

@@ -1,13 +1,9 @@
 name: CD
 
+# drafting.tools: upstream CI is kept for merges but not run here;
+# our own pipeline is .github/workflows/drafting-tools.yml.
 on:
-  push:
-    branches:
-      - master
-  release:
-    types:
-      - created
-
+  workflow_dispatch:
 jobs:
   cancel_previous_runs:
     runs-on: ubuntu-latest

@@ -278,6 +278,10 @@ public:
     bool forceToMesh;
 
     EntityMap remap;
+    // Next free id to hand out in remap. Derived from remap, not saved; zero means
+    // "not computed yet". Needed because a file can carry a remap table whose ids
+    // are not 1..N, and handing out size()+1 would then collide with an existing id.
+    uint32_t    nextRemapId = 0;
 
     Platform::Path linkFile;
     SMesh       impMesh;

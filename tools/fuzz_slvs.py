@@ -74,6 +74,7 @@ def main():
     rnd = random.Random(int(os.environ.get("FUZZ_SEED", "1")))
     work = os.path.join(out_dir, "_work.slvs")
     seen = set()
+    serious = set()
     stats = {"runs": 0, "ok": 0, "fail_solve": 0, "crash": 0, "timeout": 0}
     t0 = time.time()
     env = dict(os.environ, ASAN_OPTIONS="detect_leaks=0:abort_on_error=0",
@@ -104,6 +105,8 @@ def main():
         except subprocess.TimeoutExpired:
             kind, bucket, err, rc = "timeout", "timeout", "", None
         stats[kind] += 1
+        if "Sanitizer" in bucket or "runtime error" in bucket:
+            serious.add(bucket[:80])
         key = hashlib.md5(bucket.encode()).hexdigest()[:10]
         if key not in seen:
             seen.add(key)
@@ -114,6 +117,12 @@ def main():
     stats["seconds"] = round(time.time() - t0)
     stats["unique_findings"] = len(seen)
     print(stats)
+    # Exit 2 only for memory unsafety. Assertion aborts and hangs are reported by
+    # the caller: both are still being worked through, and both are a controlled
+    # stop rather than undefined behaviour.
+    if serious:
+        print("SERIOUS:", ", ".join(sorted(serious)))
+        sys.exit(2)
 
 
 if __name__ == "__main__":

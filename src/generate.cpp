@@ -93,16 +93,58 @@ bool SolveSpaceUI::PruneGroups(hGroup hg) {
     return true;
 }
 
+
+bool SolveSpaceUI::PruneBrokenEntities(hGroup hg) {
+    // An entity refers to the points, normal and distance that define it. Those
+    // come from the same generation pass, so in a well formed sketch they always
+    // exist; in a damaged one they may not, and the first thing to touch such a
+    // reference (the solver, the bounding box, drawing) asserts on a handle it
+    // cannot find. Drop the group instead — it cannot be regenerated meaningfully.
+    auto resolves = [](hEntity he) {
+        if(he == Entity::NO_ENTITY || he == Entity::FREE_IN_3D) return true;
+        return SK.entity.FindByIdNoOops(he) != nullptr;
+    };
+
+    bool broken = false;
+    for(Entity &e : SK.entity) {
+        if(e.group != hg) continue;
+        if(!resolves(e.workplane) || !resolves(e.normal) || !resolves(e.distance)) {
+            broken = true;
+            break;
+        }
+        for(int i = 0; i < MAX_POINTS_IN_ENTITY; i++) {
+            if(!resolves(e.point[i])) { broken = true; break; }
+        }
+        if(broken) break;
+    }
+    if(!broken) return false;
+
+    (deleted.groups)++;
+    SK.group.RemoveById(hg);
+    return true;
+}
+
 bool SolveSpaceUI::PruneRequestsAndConstraints(hGroup hg) {
-    auto entityRequestExists = [](hEntity he, bool checkEntity = false) {
+    const int thisOrder = SK.GetGroup(hg)->order;
+    auto entityRequestExists = [&](hEntity he, bool checkEntity = false) {
         if(he == Entity::NO_ENTITY) {
             return true;
         }
 
         if(he.isFromRequest()) {
-            if(SK.request.FindByIdNoOops(he.request()) != nullptr) {
-                return true;
-            }
+            Request *r = SK.request.FindByIdNoOops(he.request());
+            if(r == nullptr) return false;
+            if(!checkEntity) return true;
+            // The request exists, but the handle may still name an entity the
+            // request never generates (a damaged file can say point 7 of a circle).
+            // Only groups up to this one have been generated so far, so entities
+            // from later groups are legitimately absent and not checked here.
+            Group *rg = SK.group.FindByIdNoOops(r->group);
+            if(rg == nullptr) return false;
+            // A constraint can only refer backwards, to its own group or an earlier
+            // one; a reference into a later group is not just absent now, it is wrong.
+            if(rg->order > thisOrder) return false;
+            return SK.entity.FindByIdNoOops(he) != nullptr;
         } else if(!checkEntity || SK.entity.FindByIdNoOops(he) != nullptr) {
             return true;
         }
@@ -286,6 +328,10 @@ void SolveSpaceUI::GenerateAll(Generate type, bool andFindFree, bool genForBBox)
         // The requests and constraints depend on stuff in this or the
         // previous group, so check them after generating.
         if(PruneRequestsAndConstraints(hg))
+            goto pruned;
+
+        // And the entities we just generated must be internally consistent.
+        if(PruneBrokenEntities(hg))
             goto pruned;
 
         // Use the previous values for params that we've seen before, as

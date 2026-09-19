@@ -513,24 +513,44 @@ bool SolveSpaceUI::LoadFromFile(const Platform::Path &filename, bool canCancel) 
             if(sv.g.type == Group::Type::LINKED)
                 sv.g.opA.v = 0;
 
-            SK.group.Add(&(sv.g));
+            if(sv.g.h.v == 0 || SK.group.FindByIdNoOops(sv.g.h) != nullptr) {
+                fileLoadError = true;   // duplicate or null handle
+            } else {
+                SK.group.Add(&(sv.g));
+            }
             sv.g = {};
             sv.g.scale = 1; // default is 1, not 0; so legacy files need this
         } else if(strcmp(line, "AddParam")==0) {
             // params are regenerated, but we want to preload the values
             // for initial guesses
-            SK.param.Add(&(sv.p));
+            if(sv.p.h.v == 0 || SK.param.FindByIdNoOops(sv.p.h) != nullptr) {
+                fileLoadError = true;
+            } else {
+                SK.param.Add(&(sv.p));
+            }
             sv.p = {};
         } else if(strcmp(line, "AddEntity")==0) {
             // entities are regenerated
         } else if(strcmp(line, "AddRequest")==0) {
-            SK.request.Add(&(sv.r));
+            if(sv.r.h.v == 0 || SK.request.FindByIdNoOops(sv.r.h) != nullptr) {
+                fileLoadError = true;
+            } else {
+                SK.request.Add(&(sv.r));
+            }
             sv.r = {};
         } else if(strcmp(line, "AddConstraint")==0) {
-            SK.constraint.Add(&(sv.c));
+            if(sv.c.h.v == 0 || SK.constraint.FindByIdNoOops(sv.c.h) != nullptr) {
+                fileLoadError = true;
+            } else {
+                SK.constraint.Add(&(sv.c));
+            }
             sv.c = {};
         } else if(strcmp(line, "AddStyle")==0) {
-            SK.style.Add(&(sv.s));
+            if(sv.s.h.v == 0 || SK.style.FindByIdNoOops(sv.s.h) != nullptr) {
+                fileLoadError = true;
+            } else {
+                SK.style.Add(&(sv.s));
+            }
             sv.s = {};
             Style::FillDefaultStyle(&sv.s);
         } else if(strcmp(line, VERSION_STRING)==0) {
@@ -558,9 +578,18 @@ bool SolveSpaceUI::LoadFromFile(const Platform::Path &filename, bool canCancel) 
         NewFile();
     }
 
+    // Drop anything self-inconsistent before the rest of the program assumes
+    // it is well formed.
+    if(!ValidateLoadedSketch()) {
+        Error(_("This file is damaged and cannot be opened."));
+        NewFile();
+        return true;
+    }
+
     if(fileLoadError) {
-        Error(_("Unrecognized data in file. This file may be corrupt, or "
-                "from a newer version of the program."));
+        Error(_("Parts of this file were damaged, and have been left out. "
+                "Check the sketch before relying on it, and save it under a new "
+                "name if you want to keep what did load."));
         // At least leave the program in a non-crashing state.
         if(SK.group.IsEmpty()) {
             NewFile();
@@ -571,6 +600,393 @@ bool SolveSpaceUI::LoadFromFile(const Platform::Path &filename, bool canCancel) 
     }
     UpgradeLegacyData();
 
+    return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// Validation of a freshly loaded file.
+//
+// Everything below this point in the program assumes that a sketch is
+// self-consistent: that enumerations hold values it knows, that handles point at
+// objects that exist, and that numbers are finite. A file that has been damaged,
+// truncated, or hand-edited breaks those assumptions, and the kernel then hits an
+// assertion and aborts, which on the desktop loses the sketch and in a browser
+// destroys the whole session. So drop anything inconsistent here instead, and
+// tell the user once that the file was damaged.
+//-----------------------------------------------------------------------------
+
+static bool IsFinite(double v) {
+    return std::isfinite(v);
+}
+
+static bool IsKnownGroupType(Group::Type t) {
+    switch(t) {
+        case Group::Type::DRAWING_3D:
+        case Group::Type::DRAWING_WORKPLANE:
+        case Group::Type::EXTRUDE:
+        case Group::Type::LATHE:
+        case Group::Type::REVOLVE:
+        case Group::Type::HELIX:
+        case Group::Type::ROTATE:
+        case Group::Type::TRANSLATE:
+        case Group::Type::LINKED:
+            return true;
+    }
+    return false;
+}
+
+static bool IsKnownGroupSubtype(const Group &g) {
+    switch(g.type) {
+        case Group::Type::DRAWING_WORKPLANE:
+            return g.subtype == Group::Subtype::WORKPLANE_BY_POINT_ORTHO ||
+                   g.subtype == Group::Subtype::WORKPLANE_BY_LINE_SEGMENTS ||
+                   g.subtype == Group::Subtype::WORKPLANE_BY_POINT_NORMAL;
+
+        case Group::Type::EXTRUDE:
+            return g.subtype == Group::Subtype::ONE_SIDED ||
+                   g.subtype == Group::Subtype::TWO_SIDED ||
+                   g.subtype == Group::Subtype::ONE_SKEWED ||
+                   g.subtype == Group::Subtype::TWO_SKEWED;
+
+        case Group::Type::LATHE:
+        case Group::Type::REVOLVE:
+        case Group::Type::HELIX:
+        case Group::Type::ROTATE:
+        case Group::Type::TRANSLATE:
+            return g.subtype == Group::Subtype::ONE_SIDED ||
+                   g.subtype == Group::Subtype::TWO_SIDED;
+
+        default:
+            return true;
+    }
+}
+
+static bool IsKnownRequestType(Request::Type t) {
+    switch(t) {
+        case Request::Type::WORKPLANE:
+        case Request::Type::DATUM_POINT:
+        case Request::Type::LINE_SEGMENT:
+        case Request::Type::CUBIC:
+        case Request::Type::CUBIC_PERIODIC:
+        case Request::Type::CIRCLE:
+        case Request::Type::ARC_OF_CIRCLE:
+        case Request::Type::TTF_TEXT:
+        case Request::Type::IMAGE:
+            return true;
+    }
+    return false;
+}
+
+static bool IsKnownConstraintType(Constraint::Type t) {
+    switch(t) {
+        case Constraint::Type::POINTS_COINCIDENT:
+        case Constraint::Type::PT_PT_DISTANCE:
+        case Constraint::Type::PT_PLANE_DISTANCE:
+        case Constraint::Type::PT_LINE_DISTANCE:
+        case Constraint::Type::PT_FACE_DISTANCE:
+        case Constraint::Type::PROJ_PT_DISTANCE:
+        case Constraint::Type::PT_IN_PLANE:
+        case Constraint::Type::PT_ON_LINE:
+        case Constraint::Type::PT_ON_FACE:
+        case Constraint::Type::EQUAL_LENGTH_LINES:
+        case Constraint::Type::LENGTH_RATIO:
+        case Constraint::Type::ARC_ARC_LEN_RATIO:
+        case Constraint::Type::ARC_LINE_LEN_RATIO:
+        case Constraint::Type::EQ_LEN_PT_LINE_D:
+        case Constraint::Type::EQ_PT_LN_DISTANCES:
+        case Constraint::Type::EQUAL_ANGLE:
+        case Constraint::Type::EQUAL_LINE_ARC_LEN:
+        case Constraint::Type::LENGTH_DIFFERENCE:
+        case Constraint::Type::ARC_ARC_DIFFERENCE:
+        case Constraint::Type::ARC_LINE_DIFFERENCE:
+        case Constraint::Type::SYMMETRIC:
+        case Constraint::Type::SYMMETRIC_HORIZ:
+        case Constraint::Type::SYMMETRIC_VERT:
+        case Constraint::Type::SYMMETRIC_LINE:
+        case Constraint::Type::AT_MIDPOINT:
+        case Constraint::Type::HORIZONTAL:
+        case Constraint::Type::VERTICAL:
+        case Constraint::Type::DIAMETER:
+        case Constraint::Type::PT_ON_CIRCLE:
+        case Constraint::Type::SAME_ORIENTATION:
+        case Constraint::Type::ANGLE:
+        case Constraint::Type::PARALLEL:
+        case Constraint::Type::PERPENDICULAR:
+        case Constraint::Type::ARC_LINE_TANGENT:
+        case Constraint::Type::CUBIC_LINE_TANGENT:
+        case Constraint::Type::CURVE_CURVE_TANGENT:
+        case Constraint::Type::EQUAL_RADIUS:
+        case Constraint::Type::WHERE_DRAGGED:
+        case Constraint::Type::COMMENT:
+            return true;
+    }
+    return false;
+}
+
+// These constraints are meaningless outside a workplane, and assert if they get
+// there; the constraint solver has no 3d formulation for them.
+static bool NeedsWorkplane(Constraint::Type t) {
+    switch(t) {
+        case Constraint::Type::HORIZONTAL:
+        case Constraint::Type::VERTICAL:
+        case Constraint::Type::SYMMETRIC_HORIZ:
+        case Constraint::Type::SYMMETRIC_VERT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// An entity handle names either a request (top bit clear) or a group (top bit
+// set); if neither exists, nothing downstream can resolve the reference.
+static bool EntityRefResolves(hEntity he) {
+    if(he.v == 0 || he.v == Entity::FREE_IN_3D.v) return true;
+    if(he.isFromRequest()) {
+        return SK.request.FindByIdNoOops(he.request()) != nullptr;
+    }
+    return SK.group.FindByIdNoOops(he.group()) != nullptr;
+}
+
+
+// Which handles a constraint type actually dereferences when it generates its
+// equations. A file that leaves one of them null sends a null handle into the
+// solver, which asserts; there is no valid model in which these are unset.
+static bool HasRequiredHandles(const Constraint &c) {
+    auto pt  = [&](hEntity h) { return h.v != 0; };
+    switch(c.type) {
+        case Constraint::Type::POINTS_COINCIDENT:
+        case Constraint::Type::PT_PT_DISTANCE:
+        case Constraint::Type::SYMMETRIC_HORIZ:
+        case Constraint::Type::SYMMETRIC_VERT:
+            return pt(c.ptA) && pt(c.ptB);
+
+        case Constraint::Type::PT_PLANE_DISTANCE:
+        case Constraint::Type::PT_LINE_DISTANCE:
+        case Constraint::Type::PT_FACE_DISTANCE:
+        case Constraint::Type::PT_IN_PLANE:
+        case Constraint::Type::PT_ON_LINE:
+        case Constraint::Type::PT_ON_FACE:
+        case Constraint::Type::PT_ON_CIRCLE:
+            return pt(c.ptA) && pt(c.entityA);
+
+        case Constraint::Type::AT_MIDPOINT:
+            // A line plus either a point, or a plane the midpoint lies in.
+            return pt(c.entityA) && (pt(c.ptA) || pt(c.entityB));
+
+        case Constraint::Type::PROJ_PT_DISTANCE:
+            return pt(c.ptA) && pt(c.ptB) && pt(c.entityA);
+
+        case Constraint::Type::SYMMETRIC:
+        case Constraint::Type::SYMMETRIC_LINE:
+            return pt(c.ptA) && pt(c.ptB) && pt(c.entityA);
+
+        case Constraint::Type::EQ_LEN_PT_LINE_D:
+            return pt(c.ptA) && pt(c.entityA) && pt(c.entityB);
+
+        case Constraint::Type::EQ_PT_LN_DISTANCES:
+            return pt(c.ptA) && pt(c.ptB) && pt(c.entityA) && pt(c.entityB);
+
+        case Constraint::Type::EQUAL_LENGTH_LINES:
+        case Constraint::Type::LENGTH_RATIO:
+        case Constraint::Type::LENGTH_DIFFERENCE:
+        case Constraint::Type::ARC_ARC_LEN_RATIO:
+        case Constraint::Type::ARC_LINE_LEN_RATIO:
+        case Constraint::Type::ARC_ARC_DIFFERENCE:
+        case Constraint::Type::ARC_LINE_DIFFERENCE:
+        case Constraint::Type::EQUAL_RADIUS:
+        case Constraint::Type::EQUAL_LINE_ARC_LEN:
+        case Constraint::Type::SAME_ORIENTATION:
+        case Constraint::Type::ANGLE:
+        case Constraint::Type::PARALLEL:
+        case Constraint::Type::PERPENDICULAR:
+        case Constraint::Type::ARC_LINE_TANGENT:
+        case Constraint::Type::CUBIC_LINE_TANGENT:
+        case Constraint::Type::CURVE_CURVE_TANGENT:
+            return pt(c.entityA) && pt(c.entityB);
+
+        case Constraint::Type::EQUAL_ANGLE:
+            return pt(c.entityA) && pt(c.entityB) && pt(c.entityC) && pt(c.entityD);
+
+        case Constraint::Type::DIAMETER:
+            return pt(c.entityA);
+
+        case Constraint::Type::WHERE_DRAGGED:
+            return pt(c.ptA);
+
+        case Constraint::Type::HORIZONTAL:
+        case Constraint::Type::VERTICAL:
+            // Either a line segment, or two points.
+            return pt(c.entityA) || (pt(c.ptA) && pt(c.ptB));
+
+        case Constraint::Type::COMMENT:
+            return true;
+    }
+    return false;
+}
+
+bool SolveSpaceUI::ValidateLoadedSketch() {
+    bool damaged = false;
+
+    // Handles are bit-packed into the handles of the things they generate:
+    // a group number goes into bits 16..29 of its entities and parameters, and a
+    // request or constraint number into bits 16..31 of theirs. A number outside
+    // that range silently aliases another object's namespace, which shows up much
+    // later as a duplicate or missing handle deep in the kernel.
+    for(Group &g : SK.group) {
+        if(g.h.v >= 0x4000) { g.tag = 1; damaged = true; } else { g.tag = 0; }
+    }
+    SK.group.RemoveTagged();
+    for(Request &r : SK.request) {
+        if(r.h.v >= 0x10000) { r.tag = 1; damaged = true; } else { r.tag = 0; }
+    }
+    SK.request.RemoveTagged();
+    for(Constraint &c : SK.constraint) {
+        if(c.h.v >= 0x10000) { c.tag = 1; damaged = true; } else { c.tag = 0; }
+    }
+    SK.constraint.RemoveTagged();
+
+    // Groups. A group with an unknown type or subtype reaches a switch that has
+    // no case for it, and asserts.
+    for(Group &g : SK.group) {
+        bool bad = !IsKnownGroupType(g.type) || !IsKnownGroupSubtype(g) ||
+                   !IsFinite(g.valA) || !IsFinite(g.valB) || !IsFinite(g.valC) ||
+                   !IsFinite(g.scale) || g.scale == 0;
+        // Everything derived from another group needs that group; a null opA is not
+        // "no source", it is a handle the kernel will look up and fail to find.
+        if(!bad && g.opA.v == 0) {
+            switch(g.type) {
+                case Group::Type::EXTRUDE:
+                case Group::Type::LATHE:
+                case Group::Type::REVOLVE:
+                case Group::Type::HELIX:
+                case Group::Type::ROTATE:
+                case Group::Type::TRANSLATE:
+                    bad = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if(!bad && g.opA.v != 0 && SK.group.FindByIdNoOops(g.opA) == nullptr) bad = true;
+        if(!bad && g.opB.v != 0 && SK.group.FindByIdNoOops(g.opB) == nullptr) bad = true;
+        if(!bad) {
+            // The remap table maps (input entity, copy number) onto a 16-bit id that
+            // becomes part of a generated entity's handle. Duplicate or out-of-range
+            // ids make the group generate two entities with the same handle.
+            std::set<uint32_t> usedIds;
+            for(const auto &it : g.remap) {
+                if(it.second.v == 0 || it.second.v >= 0x10000 ||
+                   !usedIds.insert(it.second.v).second) {
+                    bad = true;
+                    break;
+                }
+            }
+        }
+        if(!bad && (!EntityRefResolves(g.predef.origin) ||
+                    !EntityRefResolves(g.predef.entityB) ||
+                    !EntityRefResolves(g.predef.entityC) ||
+                    !EntityRefResolves(g.activeWorkplane))) bad = true;
+        if(bad) {
+            g.tag = 1;
+            damaged = true;
+        } else {
+            g.tag = 0;
+        }
+    }
+    SK.group.RemoveTagged();
+
+    // There must always be something to activate.
+    if(SK.group.IsEmpty()) {
+        return false;
+    }
+
+    // Every sketch has a references group holding the three coordinate planes, and
+    // the rest of the program takes them for granted: ForceReferences() looks them
+    // up by handle and asserts if they are gone. Put them back if the file lost them.
+    if(SK.group.FindByIdNoOops(Group::HGROUP_REFERENCES) == nullptr) {
+        Group g = {};
+        g.visible = true;
+        g.name = C_("group-name", "#references");
+        g.type = Group::Type::DRAWING_3D;
+        g.order = 0;
+        g.scale = 1;
+        g.h = Group::HGROUP_REFERENCES;
+        SK.group.Add(&g);
+        damaged = true;
+    }
+    for(hRequest hr : { Request::HREQUEST_REFERENCE_XY,
+                        Request::HREQUEST_REFERENCE_YZ,
+                        Request::HREQUEST_REFERENCE_ZX }) {
+        Request *r = SK.request.FindByIdNoOops(hr);
+        if(r != nullptr && r->type == Request::Type::WORKPLANE &&
+           r->group == Group::HGROUP_REFERENCES) {
+            continue;
+        }
+        if(r != nullptr) {
+            r->tag = 1;
+            SK.request.RemoveTagged();
+        }
+        Request nr = {};
+        nr.type      = Request::Type::WORKPLANE;
+        nr.group     = Group::HGROUP_REFERENCES;
+        nr.workplane = Entity::FREE_IN_3D;
+        nr.h         = hr;
+        SK.request.Add(&nr);
+        damaged = true;
+    }
+
+    // Requests.
+    for(Request &r : SK.request) {
+        bool bad = !IsKnownRequestType(r.type) ||
+                   SK.group.FindByIdNoOops(r.group) == nullptr ||
+                   !EntityRefResolves(r.workplane);
+        r.tag = bad ? 1 : 0;
+        if(bad) damaged = true;
+    }
+    SK.request.RemoveTagged();
+
+    // Constraints.
+    for(Constraint &c : SK.constraint) {
+        bool bad = !IsKnownConstraintType(c.type) ||
+                   SK.group.FindByIdNoOops(c.group) == nullptr ||
+                   !IsFinite(c.valA) ||
+                   !EntityRefResolves(c.workplane) ||
+                   !EntityRefResolves(c.ptA) || !EntityRefResolves(c.ptB) ||
+                   !EntityRefResolves(c.entityA) || !EntityRefResolves(c.entityB) ||
+                   !EntityRefResolves(c.entityC) || !EntityRefResolves(c.entityD);
+        if(!bad && NeedsWorkplane(c.type) && c.workplane == Entity::FREE_IN_3D) bad = true;
+        if(!bad && !HasRequiredHandles(c)) bad = true;
+        // A reference dimension must be a constraint that produces exactly one
+        // equation to satisfy; anything else asserts in ModifyToSatisfy().
+        if(!bad && c.reference && !c.HasLabel()) bad = true;
+        c.tag = bad ? 1 : 0;
+        if(bad) damaged = true;
+    }
+    SK.constraint.RemoveTagged();
+
+    // Parameters are only initial guesses, so a bad value can simply be dropped.
+    for(Param &p : SK.param) {
+        if(!IsFinite(p.val)) {
+            p.val = 0;
+            damaged = true;
+        }
+    }
+
+    // Styles.
+    for(Style &s : SK.style) {
+        if(!IsFinite(s.width) || !IsFinite(s.textHeight) || !IsFinite(s.stippleScale)) {
+            s.tag = 1;
+            damaged = true;
+        } else {
+            s.tag = 0;
+        }
+    }
+    SK.style.RemoveTagged();
+
+    if(damaged) {
+        fileLoadError = true;
+    }
     return true;
 }
 

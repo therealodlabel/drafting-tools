@@ -1,15 +1,9 @@
 name: Test
 
+# drafting.tools: upstream CI is kept for merges but not run here;
+# our own pipeline is .github/workflows/drafting-tools.yml.
 on:
-  pull_request:
-    branches:
-      - master
-  push:
-    branches-ignore:
-      - master
-    tags-ignore:
-      - v*
-
+  workflow_dispatch:
 jobs:
   test_ubuntu:
       runs-on: ubuntu-latest

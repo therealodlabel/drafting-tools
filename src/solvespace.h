@@ -603,6 +603,9 @@ public:
     std::function<void(const Platform::Path &filename, bool is_saveAs, bool is_autosave)> OnSaveFinished;
     bool LoadFromFile(const Platform::Path &filename, bool canCancel = false);
     void UpgradeLegacyData();
+    // Drops anything inconsistent from a freshly loaded sketch; returns false
+    // if nothing usable is left.
+    bool ValidateLoadedSketch();
     bool LoadEntitiesFromFile(const Platform::Path &filename, EntityList *le,
                               SMesh *m, SShell *sh);
     bool LoadEntitiesFromSlvs(const Platform::Path &filename, EntityList *le,
@@ -677,6 +680,7 @@ public:
     bool GroupsInOrder(hGroup before, hGroup after);
     bool PruneGroups(hGroup hg);
     bool PruneRequestsAndConstraints(hGroup hg);
+    bool PruneBrokenEntities(hGroup hg);
     static void ShowNakedEdges(bool reportOnlyWhenNotOkay);
 
     enum class Generate : uint32_t {

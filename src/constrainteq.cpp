@@ -306,6 +306,8 @@ void ConstraintBase::GenerateEquations(IdList<Equation,hEquation> *l,
         case Type::PT_FACE_DISTANCE: {
             ExprVector pt = SK.GetEntity(ptA)->PointGetExprs();
             EntityBase *f = SK.GetEntity(entityA);
+            // See the note in PT_ON_FACE: a damaged file can name a non-face here.
+            if(!f->IsFace()) return;
             ExprVector p0 = f->FaceGetPointExprs();
             ExprVector n = f->FaceGetNormalExprs();
             AddEq(l, (pt.Minus(p0)).Dot(n)->Minus(exA), 0);
@@ -650,6 +652,9 @@ void ConstraintBase::GenerateEquations(IdList<Equation,hEquation> *l,
             // a plane, n dot (p - p0) = 0
             ExprVector p = SK.GetEntity(ptA)->PointGetExprs();
             EntityBase *f = SK.GetEntity(entityA);
+            // A damaged file can name something that is not a face here; generate
+            // no equation rather than asserting deep in the entity code.
+            if(!f->IsFace()) return;
             ExprVector p0 = f->FaceGetPointExprs();
             ExprVector n = f->FaceGetNormalExprs();
             AddEq(l, (p.Minus(p0)).Dot(n), 0);

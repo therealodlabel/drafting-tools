@@ -224,8 +224,8 @@ void Group::GenerateShellAndMesh() {
     // planar and not self-intersecting.
     bool haveSrc = true;
     if(type == Type::EXTRUDE || type == Type::LATHE || type == Type::REVOLVE) {
-        Group *src = SK.GetGroup(opA);
-        if(src->polyError.how != PolyError::GOOD) {
+        Group *src = SK.group.FindByIdNoOops(opA);
+        if(src == nullptr || src->polyError.how != PolyError::GOOD) {
             haveSrc = false;
         }
     }
