@@ -37,7 +37,18 @@ statically links these, each under its own licence, reproduced in the correspond
 
 ## Changes made in this fork
 
-Changed in 2026 by the drafting.tools maintainer. Summary; see the git history for detail.
+Changed in 2026 by the drafting.tools maintainer. What follows is a summary.
+
+The full record — every change with its reason, who requested it, where it was requested,
+who wrote it and how it was verified — is in [`docs/provenance/`](docs/provenance/):
+
+- [`CHANGE-LEDGER.md`](docs/provenance/CHANGE-LEDGER.md) — the per-change record
+- [`AUTHORSHIP.md`](docs/provenance/AUTHORSHIP.md) — how this fork was written, including
+  the use of an AI assistant
+- [`COMMUNITY-REQUESTS.md`](docs/provenance/COMMUNITY-REQUESTS.md) — the upstream reports
+  and answers that motivated the work
+- [`LICENSE-COMPLIANCE.md`](docs/provenance/LICENSE-COMPLIANCE.md) — GPLv3 obligations and
+  where each is met
 
 **Build and packaging**
 

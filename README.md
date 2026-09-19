@@ -6,7 +6,9 @@
 > deserves the credit for the program; the bugs in this fork are ours.
 >
 > What was changed, and the licence obligations that come with serving it, are in
-> [NOTICE-drafting-tools.md](NOTICE-drafting-tools.md).
+> [NOTICE-drafting-tools.md](NOTICE-drafting-tools.md). Every individual change — what it
+> does, why, who asked for it and who wrote it — is recorded in
+> [docs/provenance/](docs/provenance/).
 > Build instructions for this fork: `tools/` and `.github/workflows/drafting-tools.yml`.
 
 ---
