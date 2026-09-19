@@ -649,13 +649,13 @@ static bool IsKnownGroupSubtype(const Group &g) {
                    g.subtype == Group::Subtype::ONE_SKEWED ||
                    g.subtype == Group::Subtype::TWO_SKEWED;
 
-        case Group::Type::LATHE:
-        case Group::Type::REVOLVE:
-        case Group::Type::HELIX:
         case Group::Type::ROTATE:
         case Group::Type::TRANSLATE:
             return g.subtype == Group::Subtype::ONE_SIDED ||
                    g.subtype == Group::Subtype::TWO_SIDED;
+
+        // Lathe, revolve and helix do not read subtype at all, and files in the
+        // wild leave it at zero.
 
         default:
             return true;
