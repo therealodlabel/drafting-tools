@@ -88,6 +88,16 @@ read and deliberately not followed, the row says that too. See
 | 6.10 | `tools/web_touch.py` | 6.5 through 6.8 needed a repeatable check at phone size | **Found here** | Ours | Six of six checks pass |
 | 6.11 | New menu string added to `res/locales/en_US.po` | Otherwise the new menu item logs a missing-translation warning on every start | **Found here** | Ours | Warning gone |
 
+## Commit "Turn the view without a middle mouse button" (2026-09-22)
+
+| # | Change | Why | Requested by | Notes on origin | Verified by |
+|---|---|---|---|---|---|
+| 7.1 | **Arrow keys turn the view; shift+arrow moves it.** Each press is the same as a 50-pixel drag — 15 degrees | Orbit, pan and roll were all gated behind `if(middleDown)` in `src/mouse.cpp`, with no keyboard path at all. On a laptop trackpad with no middle button you could model a part and never look at its side | **Forum**: six threads from Mac trackpad and laptop users (see [`COMMUNITY-REQUESTS.md`](COMMUNITY-REQUESTS.md) 6.7), and **found here** — I hit the same wall driving the browser build and could not turn the model at all | Ours. Arrow keys ride in as `Key::FUNCTION` with numbers clear of F1–F24, so no platform has to learn a new key kind; the web build translates them, the others can follow | `tools/web_orbit.py`: five of five checks |
+| 7.2 | Arrow keys reach the program at all in the web build | They were dropped in the key translation, which is why there was no keyboard fallback to find | **Found here** | Ours | As above |
+| 7.3 | Turntable navigation pitches about the right axis | The pitch axis was written `{projRight.x, projRight.y, projRight.y}` — the z component is `.y`. Whenever projRight left the XY plane the axis tilted and the view drifted | **Found here** (reading the orbit code for 7.1) | Ours. Appears unreported upstream | Test suite; turntable is an opt-in setting |
+| 7.4 | **A new extrude starts from the sketch, not the zoom.** Half the sketch's largest dimension, along the workplane normal | The starting depth was `200/SS.GW.scale` along the *view* direction (`src/group.cpp:447`) — 200 screen pixels converted to model units. The same sketch extruded to a different depth depending on how far you had zoomed and which way you were looking. A cut made while zoomed in landed entirely inside the solid, removing material where nothing could see it, with no error and nothing to show | **Found here** — this is exactly what happened testing a through-cut in the browser; matches several **Forum** threads about extrudes coming out the wrong size | Ours. Still only a starting point: it is dragged or dimensioned from there | New test `group/extrude_default/zoom_independent`: same sketch, a close view and a far one, identical result |
+| 7.5 | `tools/web_orbit.py` | 7.1 and 7.2 needed a check that does not involve a mouse | **Found here** | Ours | Five of five |
+
 ---
 
 ## Summary of origins

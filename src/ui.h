@@ -636,6 +636,10 @@ public:
     Lighting GetLighting() const;
 
     void NormalizeProjectionVectors();
+    // Turn the view as a middle-button drag of (dx, dy) pixels would, and move it
+    // as a pan of (dx, dy) pixels would. Used where there is no middle button.
+    void OrbitView(double dx, double dy);
+    void PanView(double dx, double dy);
     Point2d ProjectPoint(Vector p);
     Vector ProjectPoint3(Vector p);
     Vector ProjectPoint4(Vector p, double *w);

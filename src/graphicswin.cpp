@@ -257,6 +257,28 @@ bool GraphicsWindow::KeyboardEvent(Platform::KeyboardEvent event) {
         }
     }
 
+    // Arrow keys turn the view, and with shift move it. Without this, turning the
+    // view needed a middle mouse button, which a laptop trackpad does not have:
+    // someone sitting at a borrowed laptop could draw a part and never look at
+    // its side. Each press is the same as a 50-pixel drag: 15 degrees of turn.
+    if(event.key == KeyboardEvent::Key::FUNCTION &&
+       event.num >= KeyboardEvent::ARROW_LEFT && event.num <= KeyboardEvent::ARROW_DOWN) {
+        const double step = 50;
+        double dx = 0, dy = 0;
+        switch(event.num) {
+            case KeyboardEvent::ARROW_LEFT:  dx = -step; break;
+            case KeyboardEvent::ARROW_RIGHT: dx =  step; break;
+            case KeyboardEvent::ARROW_UP:    dy = -step; break;
+            case KeyboardEvent::ARROW_DOWN:  dy =  step; break;
+        }
+        if(event.shiftDown) {
+            PanView(dx, dy);
+        } else {
+            OrbitView(dx, dy);
+        }
+        return true;
+    }
+
     // On some platforms, the OS does not handle some or all keyboard accelerators,
     // so handle them here.
     for(int i = 0; Menu[i].level >= 0; i++) {

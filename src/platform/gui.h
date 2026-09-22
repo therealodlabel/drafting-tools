@@ -85,6 +85,10 @@ struct KeyboardEvent {
         FUNCTION,
     };
 
+    // Arrow keys arrive as Key::FUNCTION with these numbers, well clear of F1-F24,
+    // so that no platform has to learn a new key kind to deliver them.
+    enum { ARROW_LEFT = 1001, ARROW_RIGHT, ARROW_UP, ARROW_DOWN };
+
     Type        type;
     Key         key;
     union {

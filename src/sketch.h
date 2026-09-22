@@ -336,6 +336,7 @@ public:
     size_t GetNumConstraints();
     Vector ExtrusionGetVector();
     void ExtrusionForceVectorTo(const Vector &v);
+    Vector DefaultExtrusion(const Vector &viewBased);
 
     // Assembling the curves into loops, and into a piecewise linear polygon
     // at the same time.

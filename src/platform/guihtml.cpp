@@ -888,6 +888,15 @@ public:
         if(key[0] == 'F' && isdigit(key[1])) {
             event.key = KeyboardEvent::Key::FUNCTION;
             event.num = std::stol(key.substr(1));
+        } else if(key == "ArrowLeft" || key == "ArrowRight" ||
+                  key == "ArrowUp"   || key == "ArrowDown") {
+            // Arrow keys used to be dropped here, which left no way at all to
+            // turn the view without a middle mouse button.
+            event.key = KeyboardEvent::Key::FUNCTION;
+            event.num = key == "ArrowLeft"  ? KeyboardEvent::ARROW_LEFT  :
+                        key == "ArrowRight" ? KeyboardEvent::ARROW_RIGHT :
+                        key == "ArrowUp"    ? KeyboardEvent::ARROW_UP    :
+                                              KeyboardEvent::ARROW_DOWN;
         } else {
             event.key = KeyboardEvent::Key::CHARACTER;
 

@@ -62,6 +62,47 @@ Vector Group::ExtrusionGetVector() {
     return Vector::From(h.param(0), h.param(1), h.param(2));
 }
 
+// The extrusion a new extrude group starts with. Only used when the group has
+// no parameters yet; an existing group keeps its own.
+//
+// Upstream starts from 200 screen pixels along the *view* direction, so the same
+// sketch extruded to a different depth depending on how far the view was zoomed
+// and which way it was pointing — a cut made while zoomed in could end up buried
+// inside the solid with nothing to show for it. Start instead from the sketch
+// itself: half its largest dimension, along the workplane normal. It is still
+// only a starting point, dragged or dimensioned from there.
+Vector Group::DefaultExtrusion(const Vector &viewBased) {
+    Entity *wp = SK.entity.FindByIdNoOops(predef.entityB);
+    Group *src = SK.group.FindByIdNoOops(opA);
+    if(!wp || !wp->IsWorkplane() || !src) return viewBased;
+
+    bool any = false;
+    Vector lo = Vector::From(VERY_POSITIVE, VERY_POSITIVE, VERY_POSITIVE);
+    Vector hi = Vector::From(VERY_NEGATIVE, VERY_NEGATIVE, VERY_NEGATIVE);
+    for(const SContour &sc : src->polyLoops.l) {
+        for(const SPoint &sp : sc.l) {
+            lo.x = std::min(lo.x, sp.p.x); hi.x = std::max(hi.x, sp.p.x);
+            lo.y = std::min(lo.y, sp.p.y); hi.y = std::max(hi.y, sp.p.y);
+            lo.z = std::min(lo.z, sp.p.z); hi.z = std::max(hi.z, sp.p.z);
+            any = true;
+        }
+    }
+    if(!any) return viewBased;
+
+    Vector size = hi.Minus(lo);
+    double extent = std::max(size.x, std::max(size.y, size.z));
+    if(!(extent > LENGTH_EPS) || !std::isfinite(extent)) return viewBased;
+
+    Entity *wn = SK.entity.FindByIdNoOops(wp->normal);
+    if(!wn) return viewBased;
+    Vector n = wn->NormalN();
+    if(!(n.Magnitude() > LENGTH_EPS)) return viewBased;
+    // Keep the side of the plane the view-based guess was on, so the part still
+    // grows toward the viewer as it always has.
+    if(n.Dot(viewBased) < 0) n = n.ScaledBy(-1);
+    return n.WithMagnitude(extent / 2);
+}
+
 void Group::ExtrusionForceVectorTo(const Vector &v) {
     SK.GetParam(h.param(0))->val = v.x;
     SK.GetParam(h.param(1))->val = v.y;
@@ -499,9 +540,10 @@ void Group::Generate(EntityList *entity, ParamList *param)
         }
 
         case Type::EXTRUDE: {
-            AddParam(param, h.param(0), gn.x);
-            AddParam(param, h.param(1), gn.y);
-            AddParam(param, h.param(2), gn.z);
+            Vector ev = DefaultExtrusion(gn);
+            AddParam(param, h.param(0), ev.x);
+            AddParam(param, h.param(1), ev.y);
+            AddParam(param, h.param(2), ev.z);
             int ai, af;
             if((subtype == Subtype::ONE_SIDED) || (subtype == Subtype::ONE_SKEWED)) {
                 ai = 0; af = 2;

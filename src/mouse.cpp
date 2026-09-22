@@ -106,6 +106,34 @@ void GraphicsWindow::StartDraggingBySelection() {
     }
 }
 
+// The same turn a middle-button drag of (dx, dy) pixels makes, for input that
+// has no middle button: arrow keys, and anything else that wants to orbit.
+void GraphicsWindow::OrbitView(double dx, double dy) {
+    dx /= scale;
+    dy /= scale;
+    double sign = SS.cameraNav ? -1.0 : 1.0;
+    double s = 0.3*(PI/180)*scale*sign; // degrees per pixel, as for the mouse
+    if(SS.turntableNav) {               // lock the Z to vertical
+        projRight = projRight.RotatedAbout({0, 0, 1}, -s * dx);
+        projUp    = projUp.RotatedAbout({0, 0, 1}, -s * dx);
+        projUp    = projUp.RotatedAbout(projRight, s * dy);
+    } else {
+        Vector r = projRight, u = projUp;
+        projRight = r.RotatedAbout(u, -s * dx);
+        projUp    = u.RotatedAbout(r, s * dy);
+    }
+    NormalizeProjectionVectors();
+    Invalidate();
+}
+
+// The same move a shift+middle-button drag of (dx, dy) pixels makes.
+void GraphicsWindow::PanView(double dx, double dy) {
+    dx /= scale;
+    dy /= scale;
+    offset = offset.Plus(projRight.ScaledBy(dx)).Plus(projUp.ScaledBy(dy));
+    Invalidate();
+}
+
 void GraphicsWindow::MouseMoved(double x, double y, bool leftDown,
             bool middleDown, bool rightDown, bool shiftDown, bool ctrlDown)
 {
@@ -166,8 +194,9 @@ void GraphicsWindow::MouseMoved(double x, double y, bool leftDown,
             double s = 0.3*(PI/180)*scale*sign; // degrees per pixel
             if(SS.turntableNav) {               // lock the Z to vertical
                 projRight = orig.projRight.RotatedAbout({0, 0, 1}, -s * dx);
-                projUp    = orig.projUp.RotatedAbout(
-                    {orig.projRight.x, orig.projRight.y, orig.projRight.y}, s * dy);
+                // The pitch axis is projRight itself; upstream wrote its z as
+                // .y, which tilted the axis whenever projRight left the XY plane.
+                projUp    = orig.projUp.RotatedAbout(orig.projRight, s * dy);
             } else {
                 projRight = orig.projRight.RotatedAbout(orig.projUp, -s * dx);
                 projUp    = orig.projUp.RotatedAbout(orig.projRight, s * dy);
