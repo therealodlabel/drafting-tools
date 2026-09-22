@@ -242,6 +242,9 @@ main {
 
 /* Modal popups */
 .modal {
+    /* Above the menus, which carry a z-index of their own and would otherwise
+       paint over a dialog; below the splash and crash panels. */
+    z-index: 500;
     position: absolute;
     left: 0;
     top:  0;

@@ -170,12 +170,30 @@ with sync_playwright() as p:
         pg.wait_for_timeout(300)
 
     # 6. open uploaded example
+    def dismiss_any_modal():
+        # Some prompts have no OK at all: the missing-linked-file question offers
+        # Yes / No / Cancel, and leaving it up made every later step fail.
+        for label in ("OK", "No", "Cancel", "Discard", "Don't"):
+            if click_modal_button(label):
+                return True
+        return False
+
     def open_file(local, label, extra=()):
         t = time.time()
-        while click_modal_button("OK"):
+        while dismiss_any_modal():
             pg.wait_for_timeout(300)
+        # Dismissing the missing-linked-file question drops geometry and starts a
+        # regeneration; give it time before asking for another dialog.
+        pg.wait_for_timeout(2500)
         pg.keyboard.press("Control+o")
-        pg.wait_for_timeout(800)
+        pg.wait_for_timeout(1500)
+        if not pg.locator(".modal input[type=file]").count() or not any(
+                pg.locator(".modal input[type=file]").nth(i).is_visible()
+                for i in range(pg.locator(".modal input[type=file]").count())):
+            pg.keyboard.press("Escape")
+            pg.wait_for_timeout(800)
+            pg.keyboard.press("Control+o")
+            pg.wait_for_timeout(1500)
         if not modal_visible():
             # maybe "unsaved changes" prompt came first
             pass

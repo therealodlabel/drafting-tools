@@ -600,6 +600,19 @@ bool SolveSpaceUI::LoadFromFile(const Platform::Path &filename, bool canCancel) 
     }
     UpgradeLegacyData();
 
+    // Regenerating may prune further: a group whose definition turns out to be
+    // unusable is dropped, and a damaged enough file can lose every group that
+    // way. Everything after this assumes at least one group exists — the graphics
+    // window activates the last one as it starts — so do not hand it an empty
+    // sketch.
+    if(SK.group.IsEmpty() || SK.groupOrder.IsEmpty()) {
+        NewFile();
+        GenerateAll(Generate::ALL);
+        Error(_("This file was too damaged to open. Nothing in it could be "
+                "recovered, so an empty sketch has been started instead."));
+        return false;
+    }
+
     return true;
 }
 

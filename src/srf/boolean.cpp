@@ -983,20 +983,33 @@ double SBspUv::ScaledDistanceToLine(Point2d pt, Point2d a, Point2d b, bool asSeg
     return pt.DistanceToLine(a, b, asSegment);
 }
 
-SBspUv *SBspUv::InsertOrCreateEdge(SBspUv *where, Point2d ea, Point2d eb, SSurface *srf) {
+SBspUv *SBspUv::InsertOrCreateEdge(SBspUv *where, Point2d ea, Point2d eb, SSurface *srf,
+                                   int depth) {
     if(where == NULL) {
         SBspUv *ret = Alloc();
         ret->a = ea;
         ret->b = eb;
         return ret;
     }
-    where->InsertEdge(ea, eb, srf);
+    where->InsertEdge(ea, eb, srf, depth);
     return where;
 }
 
-void SBspUv::InsertEdge(Point2d ea, Point2d eb, SSurface *srf) {
+void SBspUv::InsertEdge(Point2d ea, Point2d eb, SSurface *srf, int depth) {
     double dea = ScaledSignedDistanceToLine(ea, a, b, srf),
            deb = ScaledSignedDistanceToLine(eb, a, b, srf);
+
+    // Coordinates that are not finite have no side of a line to be on, and every
+    // comparison below is false for them, so they would fall through to the split
+    // and split forever. Keep the edge, in this node, and stop.
+    if(!(std::isfinite(dea) && std::isfinite(deb)) || depth >= MAX_INSERT_DEPTH) {
+        SBspUv *m = Alloc();
+        m->a = ea;
+        m->b = eb;
+        m->more = more;
+        more = m;
+        return;
+    }
 
     if(fabs(dea) < LENGTH_EPS && fabs(deb) < LENGTH_EPS) {
         // Line segment is coincident with this one, store in same node
@@ -1008,33 +1021,44 @@ void SBspUv::InsertEdge(Point2d ea, Point2d eb, SSurface *srf) {
     } else if(fabs(dea) < LENGTH_EPS) {
         // Point A lies on this line, but point B does not
         if(deb > 0) {
-            pos = InsertOrCreateEdge(pos, ea, eb, srf);
+            pos = InsertOrCreateEdge(pos, ea, eb, srf, depth + 1);
         } else {
-            neg = InsertOrCreateEdge(neg, ea, eb, srf);
+            neg = InsertOrCreateEdge(neg, ea, eb, srf, depth + 1);
         }
     } else if(fabs(deb) < LENGTH_EPS) {
         // Point B lies on this line, but point A does not
         if(dea > 0) {
-            pos = InsertOrCreateEdge(pos, ea, eb, srf);
+            pos = InsertOrCreateEdge(pos, ea, eb, srf, depth + 1);
         } else {
-            neg = InsertOrCreateEdge(neg, ea, eb, srf);
+            neg = InsertOrCreateEdge(neg, ea, eb, srf, depth + 1);
         }
     } else if(dea > 0 && deb > 0) {
-        pos = InsertOrCreateEdge(pos, ea, eb, srf);
+        pos = InsertOrCreateEdge(pos, ea, eb, srf, depth + 1);
     } else if(dea < 0 && deb < 0) {
-        neg = InsertOrCreateEdge(neg, ea, eb, srf);
+        neg = InsertOrCreateEdge(neg, ea, eb, srf, depth + 1);
     } else {
         // New edge crosses this one; we need to split.
         Point2d n = ((b.Minus(a)).Normal()).WithMagnitude(1);
         double d = a.Dot(n);
         double t = (d - n.Dot(ea)) / (n.Dot(eb.Minus(ea)));
         Point2d pi = ea.Plus((eb.Minus(ea)).ScaledBy(t));
+        // A split that lands on one of the endpoints hands the same edge back to
+        // the recursion, which then splits it in the same place forever.
+        if(!std::isfinite(t) || !std::isfinite(pi.x) || !std::isfinite(pi.y) ||
+           pi.DistanceTo(ea) < LENGTH_EPS || pi.DistanceTo(eb) < LENGTH_EPS) {
+            SBspUv *m = Alloc();
+            m->a = ea;
+            m->b = eb;
+            m->more = more;
+            more = m;
+            return;
+        }
         if(dea > 0) {
-            pos = InsertOrCreateEdge(pos, ea, pi, srf);
-            neg = InsertOrCreateEdge(neg, pi, eb, srf);
+            pos = InsertOrCreateEdge(pos, ea, pi, srf, depth + 1);
+            neg = InsertOrCreateEdge(neg, pi, eb, srf, depth + 1);
         } else {
-            neg = InsertOrCreateEdge(neg, ea, pi, srf);
-            pos = InsertOrCreateEdge(pos, pi, eb, srf);
+            neg = InsertOrCreateEdge(neg, ea, pi, srf, depth + 1);
+            pos = InsertOrCreateEdge(pos, pi, eb, srf, depth + 1);
         }
     }
     return;

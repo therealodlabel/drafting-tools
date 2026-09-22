@@ -125,7 +125,24 @@ void SolveSpaceUI::Init() {
     for(size_t i = 0; i < MAX_RECENT; i++) {
         std::string rawPath = settings->ThawString("RecentFile_" + std::to_string(i), "");
         if(rawPath.empty()) continue;
-        recentFiles.push_back(Platform::Path::From(rawPath));
+        // Paths built by joining onto the file area's root used to come out with a
+        // doubled separator; clean those before anything compares them.
+        size_t at;
+        while((at = rawPath.find("//")) != std::string::npos) {
+            rawPath.erase(at, 1);
+        }
+        Platform::Path path = Platform::Path::From(rawPath);
+        // A stored entry is a promise that the file is there to open. In a browser
+        // the file area is wiped by clearing site data, and on any platform files
+        // get moved or deleted, so a menu full of entries that only produce an
+        // error is worse than a short menu. Drop the ones that are gone.
+        if(!Platform::FileExists(path)) continue;
+        if(std::find_if(recentFiles.begin(), recentFiles.end(),
+                        [&](const Platform::Path &p) { return p.Equals(path); })
+                != recentFiles.end()) {
+            continue;
+        }
+        recentFiles.push_back(path);
     }
     // Autosave timer. In a browser a tab can be closed at any moment and there is
     // no crash-recovery habit to fall back on, so autosave more often there.
@@ -571,11 +588,12 @@ void SolveSpaceUI::AddToRecentList(const Platform::Path &filename) {
         recentFiles.erase(it);
     }
 
-    if(recentFiles.size() > MAX_RECENT) {
-        recentFiles.erase(recentFiles.begin() + MAX_RECENT);
-    }
-
     recentFiles.insert(recentFiles.begin(), filename);
+    // Trim after inserting, not before: trimming first left room for the new entry
+    // to push the list one over the limit.
+    if(recentFiles.size() > MAX_RECENT) {
+        recentFiles.resize(MAX_RECENT);
+    }
     GW.PopulateRecentFiles();
 }
 
@@ -1263,6 +1281,32 @@ void Sketch::Clear() {
     param.Clear();
 }
 
+// A handle resolving is not enough: it has to name the right kind of thing. A
+// point in 2D asks its workplane for a normal, and if that handle happens to name
+// a normal rather than a workplane, the normal's own (absent) normal is looked up
+// and the program aborts. A damaged file is full of handles that resolve to the
+// wrong kind.
+bool EntityFieldsAreWellTyped(IdList<Entity, hEntity> &entity, const Entity &e) {
+    if(e.workplane != Entity::FREE_IN_3D) {
+        Entity *w = entity.FindByIdNoOops(e.workplane);
+        if(w == nullptr || !w->IsWorkplane()) return false;
+    } else if(e.type == Entity::Type::POINT_IN_2D) {
+        // A point in 2D is positioned within its workplane; there has to be one.
+        return false;
+    }
+    if(e.normal != Entity::NO_ENTITY) {
+        Entity *n = entity.FindByIdNoOops(e.normal);
+        if(n == nullptr || !n->IsNormal()) return false;
+    } else if(e.type == Entity::Type::WORKPLANE) {
+        return false;
+    }
+    if(e.distance != Entity::NO_ENTITY) {
+        Entity *d = entity.FindByIdNoOops(e.distance);
+        if(d == nullptr || !d->IsDistance()) return false;
+    }
+    return true;
+}
+
 BBox Sketch::CalculateEntityBBox(bool includingInvisible) {
     BBox box = {};
     bool first = true;
@@ -1277,9 +1321,38 @@ BBox Sketch::CalculateEntityBBox(bool includingInvisible) {
         }
     };
 
+    // Every handle an entity names has to resolve before its position can be
+    // computed. In a well formed sketch they all do; in a damaged one this is the
+    // first pass to walk every entity, so it is where a dangling handle surfaces
+    // — as an assertion, taking the program with it. The bounding box is advisory
+    // (it only scales the chord tolerance), so skip what cannot be evaluated and
+    // let the pruning that runs later drop it properly.
+    // The check has to follow the chain, not just the first link: a point in a
+    // workplane asks that workplane for its normal, and it is the workplane's
+    // handle that may be the dangling one.
+    std::function<bool(const Entity &, int)> evaluable =
+            [&](const Entity &e, int depth) -> bool {
+        if(depth > 4) return true;  // deep enough to have found anything real
+        auto reachable = [&](hEntity he) {
+            if(he == Entity::NO_ENTITY || he == Entity::FREE_IN_3D) return true;
+            Entity *referenced = entity.FindByIdNoOops(he);
+            if(referenced == nullptr) return false;
+            return evaluable(*referenced, depth + 1);
+        };
+        if(!EntityFieldsAreWellTyped(entity, e)) return false;
+        if(!reachable(e.workplane) || !reachable(e.normal) || !reachable(e.distance)) {
+            return false;
+        }
+        for(int i = 0; i < MAX_POINTS_IN_ENTITY; i++) {
+            if(!reachable(e.point[i])) return false;
+        }
+        return true;
+    };
+
     for(const Entity &e : entity) {
         if(e.construction) continue;
         if(!(includingInvisible || e.IsVisible())) continue;
+        if(!evaluable(e, 0)) continue;
 
         // arc center point shouldn't be included in bounding box calculation
         if(e.IsPoint() && e.h.isFromRequest()) {

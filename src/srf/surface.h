@@ -51,8 +51,13 @@ public:
     double ScaledDistanceToLine(Point2d pt, Point2d a, Point2d b, bool asSegment,
         SSurface *srf) const;
 
-    void InsertEdge(Point2d a, Point2d b, SSurface *srf);
-    static SBspUv *InsertOrCreateEdge(SBspUv *where, Point2d ea, Point2d eb, SSurface *srf);
+    // A well formed sketch splits this tree at most once per edge, so the depth
+    // is bounded by the edge count; a damaged one can produce a split that does
+    // not make the problem any smaller, and then the recursion never ends.
+    enum { MAX_INSERT_DEPTH = 1024 };
+    void InsertEdge(Point2d a, Point2d b, SSurface *srf, int depth = 0);
+    static SBspUv *InsertOrCreateEdge(SBspUv *where, Point2d ea, Point2d eb, SSurface *srf,
+                                      int depth = 0);
     Class ClassifyPoint(Point2d p, Point2d eb, SSurface *srf) const;
     Class ClassifyEdge(Point2d ea, Point2d eb, SSurface *srf) const;
     double MinimumDistanceToEdge(Point2d p, SSurface *srf) const;

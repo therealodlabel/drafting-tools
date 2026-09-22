@@ -605,6 +605,11 @@ class FileUploadHelper {
         this.updateFileList();
 
         this.is_shown = true;
+        // Modals stack in DOM order, and each helper appends its root when it is
+        // constructed rather than when it is shown, so a dialog raised while
+        // another was open could appear underneath it. Move this one to the end
+        // so the dialog being shown is the one on top.
+        document.querySelector("body").appendChild(this.modalRoot);
         this.modalRoot.style.display = "block";
     }
 
@@ -708,6 +713,8 @@ class FileDownloadHelper {
 
     showDialog() {
         this.is_shown = true;
+        // See the note in the file manager's showDialog: last shown, on top.
+        document.querySelector("body").appendChild(this.modalRoot);
         this.modalRoot.style.display = "block";
     }
 

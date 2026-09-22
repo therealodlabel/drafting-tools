@@ -79,12 +79,44 @@ bool SolveSpaceUI::EntityExists(hEntity he) {
     return SK.entity.FindByIdNoOops(he) ? true : false;
 }
 
+// EntityExists() lets a handle be absent, since for most groups most of the
+// predefined entities do not apply. Some groups dereference them unconditionally
+// though, and an absent handle there is not "does not apply" — it is a group that
+// cannot be generated, and Group::Generate asserts on the missing handle before
+// anything else gets a chance to notice. Say which ones a group actually needs.
+static bool HasRequiredPredefs(const Group *g) {
+    auto present = [](hEntity he) {
+        return he != Entity::NO_ENTITY && SK.entity.FindByIdNoOops(he) != nullptr;
+    };
+
+    switch(g->type) {
+        case Group::Type::DRAWING_WORKPLANE:
+            if(!present(g->predef.origin)) return false;
+            if(g->subtype == Group::Subtype::WORKPLANE_BY_LINE_SEGMENTS) {
+                return present(g->predef.entityB) && present(g->predef.entityC);
+            } else if(g->subtype == Group::Subtype::WORKPLANE_BY_POINT_NORMAL) {
+                return present(g->predef.entityB);
+            }
+            return true;
+
+        case Group::Type::LATHE:
+        case Group::Type::REVOLVE:
+        case Group::Type::HELIX:
+        case Group::Type::ROTATE:
+            return present(g->predef.origin) && present(g->predef.entityB);
+
+        default:
+            return true;
+    }
+}
+
 bool SolveSpaceUI::PruneGroups(hGroup hg) {
     Group *g = SK.GetGroup(hg);
     if(GroupsInOrder(g->opA, hg) &&
        EntityExists(g->predef.origin) &&
        EntityExists(g->predef.entityB) &&
-       EntityExists(g->predef.entityC))
+       EntityExists(g->predef.entityC) &&
+       HasRequiredPredefs(g))
     {
         return false;
     }
@@ -108,6 +140,13 @@ bool SolveSpaceUI::PruneBrokenEntities(hGroup hg) {
     bool broken = false;
     for(Entity &e : SK.entity) {
         if(e.group != hg) continue;
+        // A handle that resolves to the wrong kind of entity is as broken as one
+        // that resolves to nothing: the code that follows it asks for something
+        // that kind does not have.
+        if(!EntityFieldsAreWellTyped(SK.entity, e)) {
+            broken = true;
+            break;
+        }
         if(!resolves(e.workplane) || !resolves(e.normal) || !resolves(e.distance)) {
             broken = true;
             break;

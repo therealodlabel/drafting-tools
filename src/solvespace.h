@@ -395,6 +395,8 @@ public:
 #   define ENTITY Entity
 #   define CONSTRAINT Constraint
 #endif
+bool EntityFieldsAreWellTyped(IdList<Entity, hEntity> &entity, const Entity &e);
+
 class Sketch {
 public:
     // These are user-editable, and define the sketch.
